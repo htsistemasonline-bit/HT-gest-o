@@ -1,0 +1,76 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: clients
+    // Fields: name (string), email (string), phone (string), birthDate (string), city (string), source (string), createdAt (string)
+    
+    // Collection: appointments
+    // Fields: clientId (string), clientName (string), date (string), time (string), service (string), status (string), price (number)
+    
+    // Collection: budgets
+    // Fields: clientId (string), description (string), value (number), status (string)
+    
+    // Collection: inventory
+    // Fields: item (string), quantity (number), unit (string), minQuantity (number)
+    
+    // Collection: transactions
+    // Fields: type (string), amount (number), date (string), description (string), category (string)
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "htsistemasonline@gmail.com" && request.auth.token.email_verified == true);
+    }
+
+    function isValidClient(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             data.email is string && data.email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$") &&
+             data.phone is string && data.phone.size() >= 8;
+    }
+
+    // Rules
+    match /clients/{clientId} {
+      // Allow creation and reading by anyone (since Google Auth was removed)
+      allow read, create: if true;
+      allow update, delete: if true;
+
+      match /followups/{followupId} {
+        allow read, write: if true;
+      }
+    }
+
+    match /forms/{formId} {
+      allow read, write: if true;
+    }
+
+    match /appointments/{appointmentId} {
+      allow read, write: if true;
+    }
+
+    match /budgets/{budgetId} {
+      allow read, write: if true;
+    }
+
+    match /inventory/{itemId} {
+      allow read, write: if true;
+    }
+
+    match /transactions/{transactionId} {
+      allow read, write: if true;
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

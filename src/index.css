@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@theme {
+  --color-orange-400: #00e672;
+  --color-orange-500: #00cc66;
+  --color-orange-600: #00994d;
+}
+
+@font-face {
+  font-family: 'Aurora';
+  src: url('/aurora-bold-condensed-bt.ttf') format('truetype');
+}
+
+.font-aurora {
+  font-family: 'Aurora', sans-serif;
+}
+
+@layer base {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+}
+
+body {
+  @apply bg-[#0f1115] text-gray-100;
+}
+
+/* Specific border color override requested */
+div#root > div > div > button:first-of-type {
+  border-color: #2b2e69 !important;
+}

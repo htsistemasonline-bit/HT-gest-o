@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "clients": {
+      "title": "Clientes",
+      "description": "Cadastro de clientes do estúdio",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Nome completo" },
+        "email": { "type": "string", "description": "E-mail de contato" },
+        "phone": { "type": "string", "description": "WhatsApp/Telefone" },
+        "birthDate": { "type": "string", "description": "Data de nascimento" },
+        "city": { "type": "string", "description": "Cidade" },
+        "source": { "type": "string", "description": "Como nos conheceu" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "phone"]
+    },
+    "appointments": {
+      "title": "Agendamentos",
+      "description": "Agenda de tatuagens e piercings",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string", "description": "ID do cliente" },
+        "clientName": { "type": "string", "description": "Nome do cliente" },
+        "date": { "type": "string", "description": "Data do serviço" },
+        "time": { "type": "string", "description": "Horário" },
+        "service": { "type": "string", "description": "Tipo de serviço" },
+        "status": { "type": "string", "enum": ["scheduled", "confirmed", "completed", "cancelled"] },
+        "price": { "type": "number" }
+      },
+      "required": ["clientId", "date", "time"]
+    },
+    "budgets": {
+      "title": "Orçamentos",
+      "description": "Orçamentos e negociações",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "description": { "type": "string" },
+        "value": { "type": "number" },
+        "status": { "type": "string", "enum": ["lead", "contacted", "negotiating", "closed", "lost"] }
+      }
+    },
+    "inventory": {
+      "title": "Estoque",
+      "description": "Controle de materiais",
+      "type": "object",
+      "properties": {
+        "item": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string" },
+        "minQuantity": { "type": "number" }
+      }
+    },
+    "transactions": {
+      "title": "Financeiro",
+      "description": "Fluxo de caixa",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["income", "expense"] },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/clients": { "schema": "clients", "description": "Coleção de clientes" },
+    "/appointments": { "schema": "appointments", "description": "Coleção de agendamentos" },
+    "/budgets": { "schema": "budgets", "description": "Coleção de orçamentos" },
+    "/inventory": { "schema": "inventory", "description": "Coleção de estoque" },
+    "/transactions": { "schema": "transactions", "description": "Coleção de transações financeiras" }
+  }
+}
