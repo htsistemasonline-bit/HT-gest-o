@@ -272,6 +272,7 @@ const Dashboard = () => {
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [cadastrosSubView, setCadastrosSubView] = useState<string | null>(null);
   const [clients, setClients] = useState<any[]>([]);
+  const [budgets, setBudgets] = useState<any[]>([]);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -279,6 +280,13 @@ const Dashboard = () => {
     const q = query(collection(db, 'clients'), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (snapshot) => {
       setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+  }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, 'budgets'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+      setBudgets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
   }, []);
 
@@ -305,6 +313,15 @@ const Dashboard = () => {
       setIsLoggedIn(true);
     }
   };
+
+  const monthlyRevenue = budgets
+    .filter(b => b.status === 'Aprovado' && new Date(b.createdAt).getMonth() === new Date().getMonth() && new Date(b.createdAt).getFullYear() === new Date().getFullYear())
+    .reduce((acc, b) => {
+      const val = typeof b.value === 'string' ? parseFloat(b.value.replace('R$ ', '').replace('.', '').replace(',', '.')) : (b.value || 0);
+      return acc + (isNaN(val) ? 0 : val);
+    }, 0);
+
+  const formattedRevenue = `R$ ${monthlyRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
 
   const exportToExcel = () => {
     const worksheet = XLSX.utils.json_to_sheet(clients.map(c => ({
@@ -423,7 +440,11 @@ const Dashboard = () => {
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-2 hover:bg-white/5 rounded-lg text-gray-400 transition-colors"
             >
-              {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+              <div className="space-y-1">
+                <div className="w-6 h-0.5 bg-current"></div>
+                <div className="w-6 h-0.5 bg-current"></div>
+                <div className="w-6 h-0.5 bg-current"></div>
+              </div>
             </button>
             <h2 className="text-lg font-bold text-white">{activeTab}</h2>
           </div>
@@ -465,24 +486,10 @@ const Dashboard = () => {
             >
               {activeTab === 'Início' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <StatCard title="Faturamento Mensal" value="R$ 12.450,00" trend="+12%" icon={DollarSign} color="orange" />
-                  <StatCard title="Novos Clientes" value="48" trend="+5%" icon={Users} color="blue" />
-                  <StatCard title="Agendamentos" value="12" trend="Hoje" icon={Calendar} color="green" />
-                  <StatCard title="Taxa de Conversão" value="68%" trend="+2%" icon={BarChart3} color="purple" />
-                  
-                  <div className="col-span-1 lg:col-span-3 bg-[#1a1d21] rounded-3xl p-8 border border-white/5">
-                    <h3 className="text-xl font-bold mb-6">Timeline de Atividades</h3>
-                    <div className="space-y-6">
-                      <TimelineItem time="09:00" title="Tatuagem Realismo" client="João Silva" status="Confirmado" />
-                      <TimelineItem time="11:30" title="Piercing Septo" client="Maria Oliveira" status="Em andamento" />
-                      <TimelineItem time="14:00" title="Consulta Orçamento" client="Pedro Santos" status="Aguardando" />
-                      <TimelineItem time="16:00" title="Tatuagem Blackwork" client="Ana Costa" status="Agendado" />
-                    </div>
-                  </div>
-
-                  <div className="bg-[#1a1d21] rounded-3xl p-8 border border-white/5">
+                  {/* Quick Actions (Now at the top) */}
+                  <div className="col-span-1 lg:col-span-4 bg-[#1a1d21] rounded-3xl p-8 border border-white/5">
                     <h3 className="text-xl font-bold mb-6">Ações Rápidas</h3>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <QuickAction icon={PlusCircle} label="Novo Agendamento" onClick={() => setActiveTab('Agenda')} />
                       <QuickAction 
                         icon={UserCheck} 
@@ -495,6 +502,25 @@ const Dashboard = () => {
                       <QuickAction icon={FileText} label="Novo Orçamento" onClick={() => setActiveTab('Orçamentos')} />
                       <QuickAction icon={DollarSign} label="Lançar Despesa" onClick={() => setActiveTab('Financeiro')} />
                     </div>
+                  </div>
+                  
+                  {/* Timeline (Remains in the same relative position, but now below Quick Actions) */}
+                  <div className="col-span-1 lg:col-span-3 bg-[#1a1d21] rounded-3xl p-8 border border-white/5">
+                    <h3 className="text-xl font-bold mb-6">Timeline de Atividades</h3>
+                    <div className="space-y-6">
+                      <TimelineItem time="09:00" title="Tatuagem Realismo" client="João Silva" status="Confirmado" />
+                      <TimelineItem time="11:30" title="Piercing Septo" client="Maria Oliveira" status="Em andamento" />
+                      <TimelineItem time="14:00" title="Consulta Orçamento" client="Pedro Santos" status="Aguardando" />
+                      <TimelineItem time="16:00" title="Tatuagem Blackwork" client="Ana Costa" status="Agendado" />
+                    </div>
+                  </div>
+
+                  {/* StatCards (Now on the right column) */}
+                  <div className="flex flex-col gap-6">
+                    <StatCard title="Faturamento Mensal" value={formattedRevenue} trend="+12%" icon={DollarSign} color="orange" />
+                    <StatCard title="Novos Clientes" value="48" trend="+5%" icon={Users} color="blue" />
+                    <StatCard title="Agendamentos" value="12" trend="Hoje" icon={Calendar} color="green" />
+                    <StatCard title="Taxa de Conversão" value="68%" trend="+2%" icon={BarChart3} color="purple" />
                   </div>
                 </div>
               )}
