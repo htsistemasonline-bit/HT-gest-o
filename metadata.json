@@ -1,5 +1,7 @@
 {
   "name": "HT Gestão - Sistema de Gestão de Tattoo",
   "description": "Sistema completo para gestão de estúdios de tatuagem, incluindo agenda, financeiro, estoque e cadastro de clientes.",
-  "requestFramePermissions": ["camera"]
+  "requestFramePermissions": [
+    "camera"
+  ]
 }

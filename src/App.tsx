@@ -4,6 +4,9 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import * as XLSX from 'xlsx';
+import CalendarComponent from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
 import Webcam from 'react-webcam';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
@@ -16,6 +19,7 @@ import {
   Settings, 
   FileText, 
   PlusCircle, 
+  Share2,
   MessageSquare,
   ClipboardList,
   Globe,
@@ -47,8 +51,10 @@ import {
   Camera,
   History,
   FileUp,
-  Truck,
+  Edit2,
+  MessageCircle,
   Tag,
+  Truck,
   UserCog,
   Home,
   UserPlus,
@@ -257,14 +263,24 @@ const RegistrationForm = () => {
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('Início');
+  const [caixaStatus, setCaixaStatus] = useState<'Aberto' | 'Fechado'>('Fechado');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [clientSearch, setClientSearch] = useState('');
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [cadastrosSubView, setCadastrosSubView] = useState<string | null>(null);
+  const [clients, setClients] = useState<any[]>([]);
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    const q = query(collection(db, 'clients'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+      setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+  }, []);
 
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
@@ -288,6 +304,20 @@ const Dashboard = () => {
       // Fallback to local state if Firebase Auth fails or is disabled
       setIsLoggedIn(true);
     }
+  };
+
+  const exportToExcel = () => {
+    const worksheet = XLSX.utils.json_to_sheet(clients.map(c => ({
+      Nome: c.name,
+      Email: c.email,
+      Telefone: c.phone,
+      Cidade: c.city,
+      Origem: c.source,
+      'Data Cadastro': c.createdAt ? new Date(c.createdAt).toLocaleDateString('pt-BR') : '-'
+    })));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Clientes");
+    XLSX.writeFile(workbook, "Clientes.xlsx");
   };
 
   const handleLogout = () => {
@@ -345,7 +375,7 @@ const Dashboard = () => {
           
           <SectionTitle>Operacional</SectionTitle>
           <SidebarItem icon={Zap} label="Acesso Rápido" active={activeTab === 'Acesso Rápido'} onClick={() => setActiveTab('Acesso Rápido')} />
-          <SidebarItem icon={Calendar} label="Agenda" active={activeTab === 'Agenda'} onClick={() => setActiveTab('Agenda')} badge="3" />
+          <SidebarItem icon={Calendar} label="Agenda" active={activeTab === 'Agenda'} onClick={() => setActiveTab('Agenda')} />
           <SidebarItem icon={Activity} label="Visão Geral" active={activeTab === 'Visão Geral'} onClick={() => setActiveTab('Visão Geral')} />
           <SidebarItem icon={Briefcase} label="Diagnóstico" active={activeTab === 'Diagnóstico'} onClick={() => setActiveTab('Diagnóstico')} />
           <SidebarItem icon={Settings} label="Todos Serviços" active={activeTab === 'Todos Serviços'} onClick={() => setActiveTab('Todos Serviços')} />
@@ -355,10 +385,10 @@ const Dashboard = () => {
           <SidebarItem icon={Calendar} label="Aniversariantes" active={activeTab === 'Aniversariantes'} onClick={() => setActiveTab('Aniversariantes')} />
 
           <SectionTitle>Vendas & Atendimento</SectionTitle>
-          <SidebarItem icon={Lock} label="Caixa Diário (Fechado)" active={activeTab === 'Caixa Diário'} onClick={() => setActiveTab('Caixa Diário')} />
-          <SidebarItem icon={FileText} label="Orçamentos" active={activeTab === 'Orçamentos'} onClick={() => setActiveTab('Orçamentos')} badge="1" />
+          <SidebarItem icon={Lock} label={`Caixa Diário (${caixaStatus})`} active={activeTab === 'Caixa Diário'} onClick={() => setActiveTab('Caixa Diário')} />
+          <SidebarItem icon={FileText} label="Orçamentos" active={activeTab === 'Orçamentos'} onClick={() => setActiveTab('Orçamentos')} />
+          <SidebarItem icon={ClipboardList} label="Orçamentos (Kanban)" active={activeTab === 'Orçamentos (Kanban)'} onClick={() => setActiveTab('Orçamentos (Kanban)')} />
           <SidebarItem icon={ClipboardList} label="Gerenciar Orçamentos" active={activeTab === 'Gerenciar Orçamentos'} onClick={() => setActiveTab('Gerenciar Orçamentos')} />
-          <SidebarItem icon={LayoutDashboard} label="Orçamentos (Kanban)" active={activeTab === 'Orçamentos (Kanban)'} onClick={() => setActiveTab('Orçamentos (Kanban)')} />
           <SidebarItem icon={Users} label="Atendimentos" active={activeTab === 'Atendimentos'} onClick={() => setActiveTab('Atendimentos')} />
           <SidebarItem icon={UserCheck} label="Cadastros" active={activeTab === 'Cadastros'} onClick={() => setActiveTab('Cadastros')} />
           
@@ -484,17 +514,56 @@ const Dashboard = () => {
                           className="w-full bg-[#0f1115] border border-white/5 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:border-orange-500 outline-none transition-all"
                         />
                       </div>
-                      <button className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap">
-                        Exportar CSV
+                      <button 
+                        onClick={exportToExcel}
+                        className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap"
+                      >
+                        Exportar Excel
                       </button>
                     </div>
                   </div>
-                  <ClientsList onSelectClient={setSelectedClient} searchTerm={clientSearch} />
+                  <ClientsList onSelectClient={setSelectedClient} searchTerm={clientSearch} clients={clients} />
                 </div>
               )}
 
+              {activeTab === 'Agenda' && (
+                <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-6">
+                  <TaskModal isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} />
+                  <style>{`
+                    .react-calendar { background: #0f1115 !important; border: none !important; color: white !important; }
+                    .react-calendar__tile { color: white !important; }
+                    .react-calendar__tile--active { background: #f97316 !important; color: white !important; }
+                    .react-calendar__navigation button { color: white !important; }
+                  `}</style>
+                  <h3 className="text-xl font-bold mb-6">Agenda</h3>
+                  <div className="flex gap-2 mb-6">
+                    <button className="p-3 bg-gray-600 rounded-xl text-white"><Calendar size={20} /></button>
+                    <button onClick={() => setIsTaskModalOpen(true)} className="p-3 bg-sky-500 rounded-xl text-white"><CheckCircle2 size={20} /></button>
+                    <button className="p-3 bg-red-500 rounded-xl text-white"><X size={20} /></button>
+                    <button className="p-3 bg-orange-500 rounded-xl text-white"><MessageSquare size={20} /></button>
+                    <button className="p-3 bg-sky-500 rounded-xl text-white"><Calendar size={20} /></button>
+                    <button className="p-3 bg-white rounded-xl text-white"><img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" alt="Google Calendar" className="w-5 h-5" /></button>
+                  </div>
+                  <div className="flex gap-4 mb-6">
+                    <button className="px-4 py-2 bg-orange-500 text-white rounded-xl font-bold">Calendário</button>
+                    <button className="px-4 py-2 bg-white/5 text-gray-400 rounded-xl font-bold">Lista</button>
+                    <button className="px-4 py-2 bg-white/5 text-gray-400 rounded-xl font-bold">Relatórios</button>
+                  </div>
+                  <div className="bg-[#0f1115] p-6 rounded-2xl border border-white/5">
+                    <CalendarComponent className="w-full text-white" />
+                  </div>
+                </div>
+              )}
               {activeTab === 'Aniversariantes' && (
                 <BirthdayManager />
+              )}
+
+              {activeTab === 'Orçamentos' && (
+                <BudgetDashboard onCreateBudget={() => setActiveTab('Gerenciar Orçamentos')} />
+              )}
+
+              {activeTab === 'Orçamentos (Kanban)' && (
+                <KanbanDashboard />
               )}
 
               {activeTab === 'Gerenciar Orçamentos' && (
@@ -549,7 +618,7 @@ const Dashboard = () => {
                               </button>
                             </div>
                           </div>
-                          <ClientsList onSelectClient={setSelectedClient} />
+                          <ClientsList onSelectClient={setSelectedClient} clients={clients} />
                         </div>
                       )}
                       {cadastrosSubView !== 'Cadastrar Clientes' && cadastrosSubView !== 'Lista de Clientes' && (
@@ -576,7 +645,13 @@ const Dashboard = () => {
                 />
               )}
 
-              {activeTab !== 'Início' && activeTab !== 'Cadastros' && activeTab !== 'Formulários' && activeTab !== 'Criador de Formulários' && activeTab !== 'Clientes' && activeTab !== 'Aniversariantes' && (
+              {activeTab === 'Caixa Diário' && (
+                <CaixaDiario status={caixaStatus} setStatus={setCaixaStatus} />
+              )}
+              {activeTab === 'Atendimentos' && (
+                <AtendimentosView />
+              )}
+              {activeTab !== 'Início' && activeTab !== 'Cadastros' && activeTab !== 'Formulários' && activeTab !== 'Criador de Formulários' && activeTab !== 'Clientes' && activeTab !== 'Aniversariantes' && activeTab !== 'Caixa Diário' && activeTab !== 'Atendimentos' && (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                   <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mb-6">
                     <Settings size={40} className="text-gray-600" />
@@ -1123,16 +1198,7 @@ const CadastrosMenu = ({ onSelect }: { onSelect: (view: string) => void }) => {
   );
 };
 
-const ClientsList = ({ onSelectClient, searchTerm = '' }: { onSelectClient: (client: any) => void, searchTerm?: string }) => {
-  const [clients, setClients] = useState<any[]>([]);
-
-  useEffect(() => {
-    const q = query(collection(db, 'clients'), orderBy('createdAt', 'desc'), limit(50));
-    return onSnapshot(q, (snapshot) => {
-      setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-  }, []);
-
+const ClientsList = ({ onSelectClient, searchTerm = '', clients }: { onSelectClient: (client: any) => void, searchTerm?: string, clients: any[] }) => {
   const filteredClients = clients.filter(client => 
     client.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -1176,7 +1242,7 @@ const ClientsList = ({ onSelectClient, searchTerm = '' }: { onSelectClient: (cli
                 </span>
               </td>
               <td className="px-6 py-4 text-sm text-gray-400">
-                {new Date(client.createdAt).toLocaleDateString('pt-BR')}
+                {client.createdAt ? new Date(client.createdAt).toLocaleDateString('pt-BR') : '-'}
               </td>
               <td className="px-6 py-4">
                 <button className="p-2 hover:bg-orange-500/20 rounded-lg text-gray-500 hover:text-orange-500 transition-all">
@@ -1194,6 +1260,50 @@ const ClientsList = ({ onSelectClient, searchTerm = '' }: { onSelectClient: (cli
           )}
         </tbody>
       </table>
+    </div>
+  );
+};
+
+const TaskModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-[#1a1d21] p-6 rounded-2xl border border-white/10 w-full max-w-lg">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xl font-bold">Nova Tarefa</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Profissional</label>
+            <select className="w-full bg-[#0f1115] border border-white/5 rounded-xl p-2 text-white">
+              <option>Selecione o Profissional</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Data</label>
+              <input type="date" className="w-full bg-[#0f1115] border border-white/5 rounded-xl p-2 text-white" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Inicio</label>
+              <input type="time" className="w-full bg-[#0f1115] border border-white/5 rounded-xl p-2 text-white" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Fim</label>
+              <input type="time" className="w-full bg-[#0f1115] border border-white/5 rounded-xl p-2 text-white" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Descrição</label>
+            <textarea className="w-full bg-[#0f1115] border border-white/5 rounded-xl p-2 text-white h-24" />
+          </div>
+        </div>
+        <div className="flex justify-end gap-4 mt-6">
+          <button onClick={onClose} className="px-4 py-2 bg-white/5 rounded-xl text-gray-400">Fechar</button>
+          <button className="px-4 py-2 bg-emerald-500 rounded-xl text-white">Salvar</button>
+        </div>
+      </div>
     </div>
   );
 };
@@ -1230,7 +1340,7 @@ const BirthdayManager = () => {
 
   const sendBirthdayMessage = (client: any) => {
     const message = `Parabéns, ${client.name}! 🎉\n\nA equipe HT Gestão deseja a você um dia incrível e cheio de realizações. Feliz aniversário! 🎂🎈`;
-    const url = `https://wa.me/55${client.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
+    const url = `https://wa.me/55${client.phone?.replace(/\D/g, '') || ''}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
 
@@ -1614,7 +1724,7 @@ const ClientDetailsModal = ({ client, onClose }: { client: any, onClose: () => v
 
   const sendWhatsApp = () => {
     const message = `Olá ${client.name}! Como está a cicatrização da sua tatuagem hoje?`;
-    const url = `https://wa.me/${client.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
+    const url = `https://wa.me/${client.phone?.replace(/\D/g, '') || ''}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
 
@@ -1763,6 +1873,560 @@ const ClientDetailsModal = ({ client, onClose }: { client: any, onClose: () => v
 
 // --- Budget Components ---
 
+const NewBudgetModal = ({ onClose }: { onClose: () => void }) => {
+  const [formData, setFormData] = useState({
+    client: '', professional: '', service: '', region: '', colors: '', sessions: '1', height: '', width: '', validity: '', installments: '1', value: '', paymentMethod: ''
+  });
+  const [clients, setClients] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+
+  useEffect(() => {
+    const q = query(collection(db, 'clients'));
+    return onSnapshot(q, (snapshot) => {
+      setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await addDoc(collection(db, 'budgets'), {
+        ...formData,
+        status: 'Pendente',
+        createdAt: new Date().toISOString(),
+        clientName: formData.client,
+      });
+      onClose();
+    } catch (error) {
+      console.error('Error adding budget:', error);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#1a1d21] w-full max-w-4xl rounded-3xl border border-white/10 p-8 shadow-2xl">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-white">Orçamento</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={24} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-2 gap-6">
+            <div className="relative">
+              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Cliente</label>
+              <input 
+                placeholder="Localize o Cliente" 
+                className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setShowClientDropdown(true);
+                }}
+              />
+              {showClientDropdown && (
+                <div className="absolute z-10 w-full bg-[#1a1d21] border border-white/10 rounded-xl mt-1 max-h-40 overflow-y-auto">
+                  {clients.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())).map(c => (
+                    <div key={c.id} className="p-3 hover:bg-white/5 cursor-pointer text-white" onClick={() => {
+                      setFormData({...formData, client: c.name});
+                      setSearchTerm(c.name);
+                      setShowClientDropdown(false);
+                    }}>
+                      {c.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Profissional</label>
+              <select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, professional: e.target.value})}>
+                <option value="">Selecione o Artista</option>
+                <option value="Artista 1">Artista 1</option>
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Serviço</label>
+              <select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, service: e.target.value})}>
+                <option value="">Selecione o Serviço</option>
+                <option value="Tattoo">Tattoo</option>
+                <option value="Piercing">Piercing</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-6 p-4 border border-white/5 rounded-2xl">
+            <div>
+              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Região</label>
+              <select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, region: e.target.value})}>
+                <option value="">Selecione</option>
+                {['Cabeça', 'Pescoço', 'Ombro', 'Costas', 'Braço', 'Perna'].map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Cores</label>
+              <select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, colors: e.target.value})}>
+                <option value="">Selecione</option>
+                {['Preto e Branco', 'Colorida', 'Preto e Cinza'].map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Sessões</label>
+              <input type="number" value={formData.sessions} className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, sessions: e.target.value})} />
+            </div>
+            <div className="col-span-3">
+              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Tamanho</label>
+              <div className="flex gap-4">
+                <input placeholder="Altura(CM)" type="number" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, height: e.target.value})} />
+                <input placeholder="Largura(CM)" type="number" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, width: e.target.value})} />
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 border border-white/5 rounded-2xl grid grid-cols-3 gap-4">
+            <div className="col-span-3">
+              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Pagamento</label>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Válidade</label>
+              <input type="date" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, validity: e.target.value})} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Parc.</label>
+              <input type="number" value={formData.installments} className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, installments: e.target.value})} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Valor(R$)</label>
+              <input type="number" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, value: e.target.value})} />
+            </div>
+            <div className="col-span-3">
+              <input placeholder="Pagamento" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, paymentMethod: e.target.value})} />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-4 pt-4">
+            <button type="button" onClick={onClose} className="bg-white/5 hover:bg-white/10 text-white font-bold py-3 px-8 rounded-xl">Sair</button>
+            <button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-8 rounded-xl flex items-center gap-2">
+              <Save size={18} /> Salvar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const BudgetCard = ({ budget, onEdit, key }: { budget: any, onEdit: (b: any) => void, key?: string }) => (
+  <div className="bg-[#0f1115] p-4 rounded-xl border border-white/5 mb-4">
+    <p className="text-sm font-bold text-white">{budget.service}</p>
+    <p className="text-xs text-gray-400 mb-2">{budget.client}</p>
+    <div className="flex items-center gap-2 mb-3">
+      <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-[10px] text-white">J</div>
+      <span className="text-xs text-gray-500">Junior</span>
+    </div>
+    <p className="text-[10px] text-gray-500 mb-3">{budget.date}</p>
+    <div className="flex gap-2">
+      <button onClick={() => onEdit(budget)} className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600"><Edit2 size={14} /></button>
+      <button className="p-2 bg-orange-500/20 rounded-lg hover:bg-orange-500/30 text-orange-500"><Tag size={14} /></button>
+      <button className="p-2 bg-emerald-500/20 rounded-lg hover:bg-emerald-500/30 text-emerald-500"><MessageCircle size={14} /></button>
+    </div>
+  </div>
+);
+
+const PDFView = ({ budget, onClose }: { budget: any, onClose: () => void }) => (
+  <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[60] p-4">
+    <div className="bg-white w-full max-w-2xl h-[90vh] overflow-y-auto p-8 text-black">
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-2xl font-bold">Orçamento</h2>
+        <button onClick={onClose} className="text-gray-500 hover:text-black">Fechar</button>
+      </div>
+      <div className="space-y-4">
+        <p><strong>Nome:</strong> {budget.client}</p>
+        <p><strong>Serviço:</strong> {budget.service}</p>
+        <p><strong>Data:</strong> {budget.date}</p>
+        {/* Add more fields from the 3rd image here */}
+      </div>
+    </div>
+  </div>
+);
+
+const BudgetDetailsModal = ({ budget, onClose }: { budget: any, onClose: () => void }) => {
+  const [showPDF, setShowPDF] = useState(false);
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <div className="bg-[#1a1d21] rounded-3xl border border-white/5 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-white/5 flex justify-between items-center">
+          <h3 className="text-xl font-bold text-white">Orçamento</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
+        </div>
+        <div className="p-6 space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="block text-xs text-gray-500 font-bold uppercase mb-1">Status</label><select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10 text-white"><option>Aguardando Orçamento</option></select></div>
+            <div><label className="block text-xs text-gray-500 font-bold uppercase mb-1">Motivo Não Fechar</label><select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10 text-white"><option></option></select></div>
+            <div className="col-span-2"><label className="block text-xs text-gray-500 font-bold uppercase mb-1">Cliente</label><select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10 text-white"><option>{budget.client}</option></select></div>
+            <div><label className="block text-xs text-gray-500 font-bold uppercase mb-1">Profissional</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10 text-white" defaultValue="Junior" /></div>
+            <div><label className="block text-xs text-gray-500 font-bold uppercase mb-1">Serviço</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10 text-white" defaultValue={budget.service} /></div>
+          </div>
+          <div className="border border-white/5 rounded-xl p-4 text-gray-400">+ Formulário Padrão</div>
+          <div className="border border-white/5 rounded-xl p-4 text-gray-400">+ Formulário Personalizado</div>
+          <div className="border border-white/5 rounded-xl p-4 text-gray-400">+ Outros Anexos</div>
+          <div className="border border-white/5 rounded-xl p-4 text-gray-400">+ Etiquetas</div>
+        </div>
+        <div className="p-6 border-t border-white/5 flex justify-end gap-3">
+          <button onClick={onClose} className="px-6 py-3 rounded-xl border border-white/10 text-white hover:bg-white/5">Sair</button>
+          <button className="px-6 py-3 rounded-xl bg-gray-700 text-white font-bold hover:bg-gray-600 flex items-center gap-2"><Save size={18} /> Salvar e Responder Cliente</button>
+          <button className="px-6 py-3 rounded-xl bg-emerald-500 text-white font-bold hover:bg-emerald-600 flex items-center gap-2"><MessageCircle size={18} /> WhatsApp</button>
+          <button onClick={() => setShowPDF(true)} className="px-6 py-3 rounded-xl bg-white text-black font-bold hover:bg-gray-200 flex items-center gap-2"><FileText size={18} /> Ver Documento</button>
+        </div>
+      </div>
+      {showPDF && <PDFView budget={budget} onClose={() => setShowPDF(false)} />}
+    </div>
+  );
+};
+
+const KanbanDashboard = () => {
+  const [view, setView] = useState<'kanban' | 'clientDetails'>('kanban');
+  const [selectedBudget, setSelectedBudget] = useState<any>(null);
+
+  const budgets = [
+    { id: '1', service: 'Tatuagem', client: 'Luiz Silveira Da Conceicao Junior', date: '12/03/26', status: 'Novos Pedidos' },
+    { id: '2', service: 'HT sistema', client: 'Luiz Silveira Da Conceicao Junior', date: '12/03/26', status: 'Novos Pedidos' },
+  ];
+
+  if (view === 'clientDetails') {
+    return <ClientDetailsView onBack={() => setView('kanban')} />;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-8">
+        <h3 className="text-xl font-bold text-white mb-6">Orçamentos</h3>
+        <div className="flex gap-4">
+          <button onClick={() => setSelectedBudget({})} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold">Novo Orçamento</button>
+          <button onClick={() => setView('clientDetails')} className="bg-orange-400 hover:bg-orange-500 text-white px-6 py-3 rounded-xl font-bold">Formulário para Cliente</button>
+        </div>
+      </div>
+      <div className="flex gap-6 overflow-x-auto pb-4">
+        {['Novos Pedidos', 'Orçamentos Enviados', 'Aprovados'].map(status => (
+          <div key={status} className="bg-[#1a1d21] rounded-3xl border border-white/5 p-6 w-80 flex-shrink-0">
+            <h4 className="text-sm font-bold text-gray-400 uppercase mb-4">{status} {budgets.filter(b => b.status === status).length}</h4>
+            {budgets.filter(b => b.status === status).map(b => (
+              <BudgetCard key={b.id} budget={b} onEdit={setSelectedBudget} />
+            ))}
+          </div>
+        ))}
+      </div>
+      {selectedBudget && <BudgetDetailsModal budget={selectedBudget} onClose={() => setSelectedBudget(null)} />}
+    </div>
+  );
+};
+
+const ClientDetailsView = ({ onBack }: { onBack: () => void }) => {
+  return (
+    <div className="space-y-6">
+      <button onClick={onBack} className="text-gray-400 hover:text-white mb-4">← Voltar</button>
+      <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-8 space-y-6 text-gray-300">
+        <h2 className="text-2xl font-bold text-orange-500">Solicite seu Orçamento</h2>
+        <p className="text-sm">Preencha todos os campos com atenção, todos os campos são importantes para que seu orçamento seja providenciado com maior agilidade! Obrigado!</p>
+        
+        <div className="space-y-4">
+          <div><label className="block text-sm font-bold text-white mb-1">Seu Nome *</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
+          <div><label className="block text-sm font-bold text-white mb-1">Sua Foto Rosto (Para seu Perfil)</label><div className="border-2 border-dashed border-white/10 p-6 text-center rounded-xl">Anexar Foto</div></div>
+          <div><label className="block text-sm font-bold text-white mb-1">Nascimento</label><input type="date" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
+          <div><label className="block text-sm font-bold text-white mb-1">Cidade</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
+          <div><label className="block text-sm font-bold text-white mb-1">Email</label><input type="email" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
+          <div><label className="block text-sm font-bold text-white mb-1">WhatsApp (Com DDD sem o Zero) *</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
+          <div><label className="block text-sm font-bold text-white mb-1">Como nos Conheceu?</label><select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10"><option>Selecione</option></select></div>
+          <div><label className="block text-sm font-bold text-white mb-1">Serviço</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
+          <div><label className="block text-sm font-bold text-white mb-1">Região do Corpo *</label><select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10"><option>Qual Região do Corpo?</option></select></div>
+          <div><label className="block text-sm font-bold text-white mb-1">É Escrita? sabe a fonte?(Escolher Fonte), deixe o link ou o nome da fonte:</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
+          <div><label className="block text-sm font-bold text-white mb-1">Qual sua disponibilidade conforme Dias da semana e período do dia? *</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="block text-sm font-bold text-white mb-1">Tamanho Altura * (cm)</label><input type="number" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
+            <div><label className="block text-sm font-bold text-white mb-1">Tamanho Largura * (cm)</label><input type="number" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-white mb-2">Cor?</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2"><input type="radio" name="cor" /> Preto & Branco</label>
+              <label className="flex items-center gap-2"><input type="radio" name="cor" /> Preto & Cinza</label>
+              <label className="flex items-center gap-2"><input type="radio" name="cor" /> Colorida</label>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-white mb-2">Primeira Tattoo?</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2"><input type="radio" name="primeira" /> Sim</label>
+              <label className="flex items-center gap-2"><input type="radio" name="primeira" /> Não</label>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-white mb-2">É Maior de Idade?</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2"><input type="radio" name="maior" /> Sim</label>
+              <label className="flex items-center gap-2"><input type="radio" name="maior" /> Não</label>
+            </div>
+          </div>
+          <div><label className="block text-sm font-bold text-white mb-1">Descrição do que Deseja *</label><textarea className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10 h-32"></textarea></div>
+          
+          <div className="space-y-2">
+            <label className="block text-sm font-bold text-white">Anexe imagens para referência:</label>
+            <div className="border-2 border-dashed border-white/10 p-4 rounded-xl text-center">Anexar Foto do local</div>
+            <div className="border-2 border-dashed border-white/10 p-4 rounded-xl text-center">Anexar Imagem de Referência *</div>
+            <div className="border-2 border-dashed border-white/10 p-4 rounded-xl text-center">Anexar Outra Imagem de Referência</div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" /> Eu aceito as Políticas de Privacidade e Segurança dos Dados *</label>
+          <p className="text-xs text-gray-500">( * ) = Campos Obrigatórios</p>
+          
+          <button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl uppercase">Enviar Formulário</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CaixaDiario = ({ status, setStatus }: { status: 'Aberto' | 'Fechado', setStatus: (s: 'Aberto' | 'Fechado') => void }) => {
+  const [valorInicial, setValorInicial] = useState('');
+  
+  return (
+    <div className="space-y-6">
+      <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-8">
+        <h3 className="text-xl font-bold text-white mb-6">Caixa Diário</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-[#0f1115] p-4 rounded-xl border border-white/5">
+            <p className="text-xs text-gray-500 font-bold uppercase">Data Caixa</p>
+            <p className="text-white">{new Date().toLocaleDateString('pt-BR')}</p>
+          </div>
+          <div className="bg-[#0f1115] p-4 rounded-xl border border-white/5">
+            <p className="text-xs text-gray-500 font-bold uppercase">Status Caixa</p>
+            <p className="text-white">{status}</p>
+          </div>
+          <div className="bg-[#0f1115] p-4 rounded-xl border border-white/5">
+            <p className="text-xs text-gray-500 font-bold uppercase">Valor Inicial</p>
+            {status === 'Fechado' ? (
+              <input 
+                type="text" 
+                value={valorInicial} 
+                onChange={(e) => setValorInicial(e.target.value)}
+                className="w-full bg-transparent text-white outline-none" 
+                placeholder="R$ 0,00"
+              />
+            ) : (
+              <p className="text-white">R$ {valorInicial || '0,00'}</p>
+            )}
+          </div>
+        </div>
+        <div className="mt-6">
+          <button 
+            onClick={() => setStatus(status === 'Fechado' ? 'Aberto' : 'Fechado')}
+            className={`px-6 py-3 rounded-xl font-bold text-white ${status === 'Fechado' ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
+          >
+            {status === 'Fechado' ? 'Abrir o Caixa' : 'Fechar o Caixa'}
+          </button>
+        </div>
+      </div>
+      <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-8">
+        <h3 className="text-xl font-bold text-white mb-6">Histórico de operadores</h3>
+      </div>
+    </div>
+  );
+};
+
+const AtendimentosView = () => {
+  const [activeSubTab, setActiveSubTab] = useState<'Nova Comanda' | 'Comandas Abertas'>('Nova Comanda');
+  const [showQuickRegister, setShowQuickRegister] = useState(false);
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-8">
+        <h3 className="text-xl font-bold text-white mb-6">Comandas</h3>
+        
+        <div className="flex gap-2 mb-6 border-b border-white/10 pb-2">
+          <button 
+            onClick={() => setActiveSubTab('Nova Comanda')}
+            className={`px-6 py-2 font-bold ${activeSubTab === 'Nova Comanda' ? 'text-orange-500 border-b-2 border-orange-500' : 'text-gray-400'}`}
+          >
+            Nova Comanda
+          </button>
+          <button 
+            onClick={() => setActiveSubTab('Comandas Abertas')}
+            className={`px-6 py-2 font-bold ${activeSubTab === 'Comandas Abertas' ? 'text-orange-500 border-b-2 border-orange-500' : 'text-gray-400'}`}
+          >
+            Comandas Abertas
+          </button>
+        </div>
+
+        {activeSubTab === 'Nova Comanda' ? (
+          <div className="space-y-4">
+            <div className="p-4 bg-[#0f1115] rounded-xl border border-white/5">
+              <label className="block text-sm font-bold text-white mb-2">Cliente</label>
+              <input 
+                type="text" 
+                placeholder="Localize o Cliente" 
+                className="w-full bg-[#1a1d21] p-3 rounded-xl border border-white/10 text-white" 
+              />
+              <button 
+                onClick={() => setShowQuickRegister(!showQuickRegister)}
+                className="text-orange-500 text-sm mt-2 font-bold"
+              >
+                + Novo Cliente Cadastro Rápido
+              </button>
+              
+              {showQuickRegister && (
+                <div className="mt-4 space-y-2">
+                  <input type="text" placeholder="Nome Cliente" className="w-full bg-[#1a1d21] p-3 rounded-xl border border-white/10 text-white" />
+                  <input type="email" placeholder="Email Cliente" className="w-full bg-[#1a1d21] p-3 rounded-xl border border-white/10 text-white" />
+                  <input type="text" placeholder="WhatsApp com DDD sem o Zero, EX: 1199644...." className="w-full bg-[#1a1d21] p-3 rounded-xl border border-white/10 text-white" />
+                </div>
+              )}
+            </div>
+            <div className="p-4 bg-[#0f1115] rounded-xl border border-white/5">
+              <label className="block text-sm font-bold text-white mb-2">Atendente</label>
+              <select className="w-full bg-[#1a1d21] p-3 rounded-xl border border-white/10 text-white">
+                <option>Selecione o Atendente</option>
+                <option>Administrador</option>
+                <option>Tatuador</option>
+              </select>
+            </div>
+            <div className="p-4 bg-[#0f1115] rounded-xl border border-white/5">
+              <label className="block text-sm font-bold text-white mb-2">Fila</label>
+              <select className="w-full bg-[#1a1d21] p-3 rounded-xl border border-white/10 text-white">
+                <option>Espera</option>
+                <option>Agendado</option>
+              </select>
+            </div>
+            <button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl uppercase">Abrir Comanda</button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <input type="text" placeholder="Procurar..." className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10 text-white" />
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-gray-400">
+                <thead className="bg-[#0f1115] text-white">
+                  <tr>
+                    <th className="p-3">Ação</th>
+                    <th className="p-3">Comanda</th>
+                    <th className="p-3">Cliente</th>
+                    <th className="p-3">Entrada</th>
+                    <th className="p-3">Fila</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-white/5">
+                    <td className="p-3"><button className="bg-blue-500 text-white px-3 py-1 rounded">Abrir Comanda</button></td>
+                    <td className="p-3">748836</td>
+                    <td className="p-3">Luiz Silveira Da Conceicao Junior</td>
+                    <td className="p-3">12/03/2026 02:59</td>
+                    <td className="p-3">Agendado</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const BudgetDashboard = ({ onCreateBudget }: { onCreateBudget: () => void }) => {
+  const [budgets, setBudgets] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('Todos');
+  const [showNewModal, setShowNewModal] = useState(false);
+
+  useEffect(() => {
+    const q = query(collection(db, 'budgets'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+      setBudgets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    });
+  }, []);
+
+  const stats = [
+    { title: 'APROVADOS', value: budgets.filter(b => b.status === 'Aprovado').length, total: 'Total R$0,00', color: 'bg-emerald-800' },
+    { title: 'AGUARDANDO ORÇAMENTO', value: budgets.filter(b => b.status === 'Pendente').length, total: 'Total R$0,00', color: 'bg-indigo-900' },
+    { title: 'AGUARDANDO CLIENTE', value: budgets.filter(b => b.status === 'Respondido').length, total: 'Total R$0,00', color: 'bg-red-800' },
+    { title: 'PERDIDOS', value: budgets.filter(b => b.status === 'Arquivado').length, total: 'Total R$0,00', color: 'bg-gray-700' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {showNewModal && <NewBudgetModal onClose={() => setShowNewModal(false)} />}
+      <div className="flex items-center gap-4 bg-[#1a1d21] p-4 rounded-2xl border border-white/5">
+        <button onClick={() => setShowNewModal(true)} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
+          <Plus size={18} /> Novo Orçamento
+        </button>
+        <button className="bg-orange-400 hover:bg-orange-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
+          <LinkIcon size={18} /> Formulário para Clientes
+        </button>
+        <button className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
+          <Activity size={18} /> Motivo das Perdas
+        </button>
+        <button className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
+          <BarChart3 size={18} /> Funil de Vendas
+        </button>
+      </div>
+
+      <div className="grid grid-cols-4 gap-6">
+        {stats.map((stat, i) => (
+          <div key={i} className={`${stat.color} p-6 rounded-2xl text-white`}>
+            <h4 className="text-sm font-bold opacity-80">{stat.title}</h4>
+            <p className="text-4xl font-black my-2">{stat.value}</p>
+            <p className="text-xs opacity-70">{stat.total}</p>
+          </div>
+        ))}
+      </div>
+      
+      <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-6">
+        <h3 className="text-lg font-bold mb-4">Filtrar Orçamentos</h3>
+        <div className="flex gap-2 mb-6">
+          {['Todos', 'Pendente', 'Respondido', 'Aprovado', 'Arquivado'].map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                filter === f ? 'bg-orange-500 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-white/2 text-gray-500 text-[10px] font-bold uppercase tracking-wider">
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4">Cliente</th>
+                <th className="px-6 py-4">Data</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {budgets.filter(b => filter === 'Todos' || b.status === filter).map((budget) => (
+                <tr key={budget.id} className="hover:bg-white/2 transition-colors">
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
+                      budget.status === 'Aprovado' ? 'bg-emerald-500/10 text-emerald-500' :
+                      budget.status === 'Pendente' ? 'bg-yellow-500/10 text-yellow-500' :
+                      budget.status === 'Respondido' ? 'bg-blue-500/10 text-blue-500' :
+                      'bg-gray-500/10 text-gray-500'
+                    }`}>
+                      {budget.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm font-bold text-white">{budget.clientName}</td>
+                  <td className="px-6 py-4 text-sm text-gray-400">{new Date(budget.createdAt).toLocaleDateString('pt-BR')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const BudgetManager = () => {
   const [budgets, setBudgets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1864,7 +2528,7 @@ const BudgetManager = () => {
                       <button 
                         onClick={() => {
                           const msg = `Olá ${budget.clientName}, seu orçamento foi atualizado! Acompanhe aqui: ${window.location.origin}/track/${budget.trackingToken}`;
-                          window.open(`https://wa.me/55${budget.clientPhone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+                          window.open(`https://wa.me/55${budget.clientPhone?.replace(/\D/g, '') || ''}?text=${encodeURIComponent(msg)}`, '_blank');
                         }}
                         className="p-2 hover:bg-green-500/20 rounded-lg text-gray-500 hover:text-green-500 transition-all"
                         title="Enviar no WhatsApp"
@@ -1931,7 +2595,7 @@ const BudgetManager = () => {
                 <button 
                   onClick={() => {
                     const msg = `Olá ${selectedBudget.clientName}, aqui está o link para acompanhar seu orçamento: ${window.location.origin}/track/${selectedBudget.trackingToken}`;
-                    window.open(`https://wa.me/55${selectedBudget.clientPhone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+                    window.open(`https://wa.me/55${selectedBudget.clientPhone?.replace(/\D/g, '') || ''}?text=${encodeURIComponent(msg)}`, '_blank');
                   }}
                   className="flex-1 bg-[#25D366] hover:bg-[#128C7E] text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2"
                 >
@@ -2072,52 +2736,64 @@ const ClientForms = () => {
       )}
 
       <div className="bg-[#1a1d21] rounded-3xl border border-white/5 overflow-hidden">
-        <div className="p-2 bg-[#0f1115] flex gap-1 overflow-x-auto">
-          {['Orçamento', 'Ficha Anamnese', 'Cadastro Clientes', 'Reserva/Agenda Online', 'Cartão Visita Digital', 'Feedback Cliente'].map(t => (
-            <button
-              key={t}
-              onClick={() => setActiveTab(t)}
-              className={`px-6 py-3 rounded-2xl text-xs font-bold transition-all whitespace-nowrap ${
-                activeTab === t ? 'bg-[#1a1d21] text-white shadow-lg' : 'text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              {t}
+      <div className="space-y-6">
+        {/* Yellow Highlighted Section */}
+        <div className="bg-yellow-400/20 border border-yellow-500/50 rounded-3xl p-6 space-y-4">
+          <h3 className="text-lg font-bold text-yellow-500 flex items-center gap-2">
+            <span className="text-2xl">💡</span> Link único para cadastro de clientes, anamnese, orçamento e agendamento
+          </h3>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 bg-black/20 border border-yellow-500/20 rounded-xl px-4 py-3 text-sm text-yellow-100 flex items-center overflow-hidden">
+              <span className="truncate">{publicLink}</span>
+            </div>
+            <button onClick={copyLink} className="bg-yellow-500 hover:bg-yellow-600 text-black px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
+              <Copy size={18} /> Copiar
             </button>
-          ))}
+            <button className="bg-yellow-500 hover:bg-yellow-600 text-black px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
+              <Share2 size={18} /> Compartilhar
+            </button>
+            <button className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
+              <MessageSquare size={18} /> WhatsApp
+            </button>
+          </div>
+          <div className="bg-black/20 p-4 rounded-2xl border border-yellow-500/20 text-yellow-100 text-sm space-y-2">
+            <p className="font-bold">🚀 NOVO SISTEMA UNIFICADO! Um único link para que seus clientes possam:</p>
+            <ul className="list-disc list-inside space-y-1 text-xs">
+              <li>✅ Cadastrar-se ou atualizar dados via WhatsApp</li>
+              <li>✅ Solicitar orçamento com upload de imagens</li>
+              <li>✅ Preencher anamnese com assinatura digital</li>
+              <li>✅ Agendar atendimento com verificação de horários</li>
+            </ul>
+            <p className="text-xs mt-2 italic">✨ Experiência otimizada: O cliente escolhe o que deseja fazer após se identificar com o WhatsApp. Sistema inteligente que evita cadastros duplicados e mantém dados sempre atualizados!</p>
+          </div>
         </div>
 
-        <div className="p-8 space-y-6">
-          <div className="p-6 bg-[#0f1115] rounded-2xl border border-white/5 space-y-4">
-            <p className="text-xs text-gray-500 font-medium">Orçamento pelo Facebook ou WhatsApp? Compartilhe o seu link e ele mesmo(cliente) faz o cadastro no sistema!</p>
+        {/* List of Link Sections */}
+        {[
+          { title: 'Orçamento', url: publicLink, desc: 'Utilize a URL acima para receber orçamentos. Você pode copiá-la e compartilhá-la com seus clientes para facilitar o acesso ao formulário de orçamentos.' },
+          { title: 'Ficha Anamnese', url: `${window.location.origin}/anamnese`, desc: 'Link para a ficha de anamnese do cliente. Nesse link, poderá acompanhar o arquivo das fichas cadastradas.' },
+          { title: 'Site Portfólio', url: `${window.location.origin}/portfolio`, desc: 'Aqui poderá divulgar para seus clientes o portfólio das fotos dos profissionais do estúdio de forma profissional, atualizada e online.' },
+          { title: 'Cadastro Clientes', url: `${window.location.origin}/cadastro`, desc: 'Link para solicitar o cadastro de clientes. Nesse outro link, poderá ver o histórico de clientes.' },
+          { title: 'Reserva/Agenda Online', url: `${window.location.origin}/reserva`, desc: 'Acesse o menu do cadastro de profissionais, ao editar o profissional, deverá cadastrar os horários de atendimento do mesmo.' },
+          { title: 'Receba Avaliações Clientes', url: `${window.location.origin}/feedback`, desc: 'Após o serviço, poderá solicitar aos clientes uma avaliação/feedback do serviço prestado. Nesse link, poderá acompanhar as avaliações dos clientes.' }
+        ].map((item, index) => (
+          <div key={index} className="bg-[#1a1d21] rounded-3xl border border-white/5 p-6 space-y-4">
+            <h4 className="text-lg font-bold text-white">{item.title}</h4>
             <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1 bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-3 text-sm text-gray-400 flex items-center overflow-hidden">
-                <span className="truncate">{publicLink}</span>
+              <div className="flex-1 bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-sm text-gray-400 flex items-center overflow-hidden">
+                <span className="truncate">{item.url}</span>
               </div>
-              <button onClick={copyLink} className="bg-white/5 hover:bg-white/10 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap">
-                <Copy size={18} />
-                Copiar Link
+              <button onClick={() => { navigator.clipboard.writeText(item.url); alert('Link copiado!'); }} className="bg-white/5 hover:bg-white/10 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
+                <Copy size={18} /> Copiar
+              </button>
+              <button className="bg-white/5 hover:bg-white/10 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
+                <Share2 size={18} /> Compartilhar
               </button>
             </div>
+            <p className="text-sm text-gray-500">{item.desc}</p>
           </div>
-
-          <div className="flex flex-col sm:flex-row gap-4">
-            <button className="flex-1 bg-white/5 hover:bg-white/10 text-white p-6 rounded-3xl border border-white/5 flex flex-col items-center gap-3 transition-all group">
-              <div className="w-12 h-12 bg-orange-500/20 rounded-2xl flex items-center justify-center text-orange-500 group-hover:scale-110 transition-transform">
-                <MessageSquare size={24} />
-              </div>
-              <span className="font-bold">Como Funciona o Link?</span>
-            </button>
-            <button 
-              onClick={() => setShowQRCode(true)}
-              className="flex-1 bg-white/5 hover:bg-white/10 text-white p-6 rounded-3xl border border-white/5 flex flex-col items-center gap-3 transition-all group"
-            >
-              <div className="w-12 h-12 bg-orange-500/20 rounded-2xl flex items-center justify-center text-orange-500 group-hover:scale-110 transition-transform">
-                <QrCode size={24} />
-              </div>
-              <span className="font-bold">Ver QR Code</span>
-            </button>
-          </div>
-        </div>
+        ))}
+      </div>
       </div>
     </div>
   );
@@ -2407,8 +3083,154 @@ export default function App() {
         <Route path="/budget-request/:slug" element={<PublicBudgetRequest />} />
         <Route path="/track/:token" element={<PublicTracking />} />
         <Route path="/cadastro" element={<RegistrationForm />} />
+        <Route path="/portal" element={<ClientPortal />} />
         <Route path="/*" element={<Dashboard />} />
       </Routes>
     </BrowserRouter>
   );
 }
+
+const ClientPortal = () => {
+  const [step, setStep] = useState('identify');
+  const [phone, setPhone] = useState('');
+  const [client, setClient] = useState<any>(null);
+
+  const handleIdentify = async () => {
+    const q = query(collection(db, 'clients'), where('phone', '==', phone));
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+      setClient({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
+      setStep('confirm');
+    } else {
+      setStep('confirm'); // Or handle new client
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#2c3e50] flex items-center justify-center p-4">
+      {step === 'identify' && (
+        <div className="bg-[#1a1d21] p-10 rounded-3xl border border-white/5 text-center max-w-md w-full space-y-6">
+          <h2 className="text-2xl font-bold text-orange-500">Identifique-se</h2>
+          <p className="text-gray-400">Para começar, informe seu número de WhatsApp com DDD</p>
+          <input 
+            type="tel" 
+            placeholder="(00) 00000-0000" 
+            className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white"
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+          />
+          <button onClick={handleIdentify} className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl">VERIFICAR</button>
+        </div>
+      )}
+      {step === 'confirm' && (
+        <div className="bg-[#1a1d21] p-10 rounded-3xl border border-white/5 max-w-md w-full space-y-6">
+          <h2 className="text-2xl font-bold text-orange-500">Seus Dados</h2>
+          {client ? (
+            <div className="bg-white/5 p-4 rounded-xl text-gray-300 text-sm">
+              <p>Nome: {client.name}</p>
+              <p>Email: {client.email}</p>
+              <p>WhatsApp: {client.phone}</p>
+            </div>
+          ) : <p className="text-gray-400">Cliente não encontrado. Preencha seus dados.</p>}
+          <button onClick={() => setStep('menu')} className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl">CONTINUAR</button>
+        </div>
+      )}
+      {step === 'menu' && (
+        <div className="bg-[#1a1d21] p-10 rounded-3xl border border-white/5 max-w-2xl w-full space-y-6">
+          <h2 className="text-2xl font-bold text-orange-500 text-center">O que você deseja fazer?</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <button onClick={() => setStep('budget')} className="bg-white/5 p-6 rounded-2xl border border-white/5 text-white font-bold">Solicitar Orçamento</button>
+            <button className="bg-white/5 p-6 rounded-2xl border border-white/5 text-white font-bold">Calcular Valor</button>
+            <button onClick={() => setStep('anamnesis')} className="bg-white/5 p-6 rounded-2xl border border-white/5 text-white font-bold">Preencher Anamnese</button>
+            <button className="bg-white/5 p-6 rounded-2xl border border-white/5 text-white font-bold">Fazer Agendamento</button>
+            <button className="bg-white/5 p-6 rounded-2xl border border-white/5 text-white font-bold">Finalizar Cadastro</button>
+          </div>
+        </div>
+      )}
+      {step === 'anamnesis' && (
+        <div className="bg-[#1a1d21] p-6 rounded-3xl border border-white/5 max-w-4xl w-full space-y-8">
+          <h2 className="text-2xl font-bold text-orange-500 text-center">Ficha Anamnese</h2>
+          
+          {/* Personal Data Section */}
+          <div className="bg-[#0f1115] p-6 rounded-2xl border border-white/5 space-y-4">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2"><User size={20} /> Seus Dados Pessoais</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {['WhatsApp', 'Nome', 'CPF', 'RG', 'Data Nascimento', 'Gênero', 'CEP', 'Cidade', 'UF', 'Endereço', 'Bairro', 'E-mail'].map(field => (
+                <div key={field}>
+                  <label className="text-xs text-gray-500 font-bold uppercase block mb-1">{field}</label>
+                  <input className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-2 text-white" />
+                </div>
+              ))}
+              <div className="col-span-2">
+                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Como nos Conheceu?</label>
+                <select className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-2 text-white">
+                  <option>Selecione</option>
+                </select>
+              </div>
+            </div>
+            <button className="bg-orange-500 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2">
+              <Camera size={16} /> Anexar Sua Foto
+            </button>
+          </div>
+
+          {/* Evaluation Section */}
+          <div className="bg-[#0f1115] p-6 rounded-2xl border border-white/5 space-y-4">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2"><Activity size={20} /> Avaliação</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Profissional</label>
+                <select className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-2 text-white"><option>Selecione</option></select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Serviço</label>
+                <select className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-2 text-white"><option>Selecione</option></select>
+              </div>
+            </div>
+
+            {['É portador de Diabetes? Fez hemograma a menos de um ano?', 'Faz uso de medicamentos ou cirurgia a menos de 6 meses?', 'Pressão Arterial? É Epilético?', 'Teve hepatite, anemia ou é hemofílico?', 'Possui Alergia? Qual?', 'Portador de doenças transmissíveis?', 'Fez hemograma completo há menos de um ano?', 'Já teve cicatrização por quelóide?', 'Autoriza a divulgação da imagem em nossa rede social?'].map((q, i) => (
+              <div key={i} className="border-b border-white/5 pb-2">
+                <label className="flex items-center gap-3 text-white text-sm">
+                  <input type="checkbox" className="w-5 h-5 accent-orange-500" />
+                  {q}
+                </label>
+                <input placeholder="Observações" className="w-full mt-1 bg-[#1a1d21] border border-white/5 rounded-lg px-3 py-1 text-white text-sm" />
+              </div>
+            ))}
+            
+            <div>
+              <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Sangue</label>
+              <select className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-2 text-white"><option>Selecione</option></select>
+            </div>
+          </div>
+
+          {/* Description Section */}
+          <div className="bg-[#0f1115] p-6 rounded-2xl border border-white/5 space-y-4">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2"><FileText size={20} /> Descrição</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input placeholder="Descrever o Procedimento" className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-2 text-white" />
+              <select className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-3 text-white"><option>Região Corpo</option></select>
+            </div>
+          </div>
+
+          {/* Terms and Uploads */}
+          <div className="bg-[#0f1115] p-6 rounded-2xl border border-white/5 space-y-4">
+            <div className="h-40 overflow-y-auto text-xs text-gray-400 bg-[#1a1d21] p-3 rounded-lg border border-white/5">
+              {/* ... (Term text remains the same) ... */}
+              Eu, abaixo assinado(a), autorizo e concordo com o serviço prestado, declarando estar ciente de todos os cuidados recomendados pelo técnico aplicador...
+            </div>
+            <p className="text-sm text-white font-bold">Reconheço as informações apresentadas nesse documento como verdadeiras.</p>
+            <div className="flex gap-4">
+              <button className="bg-orange-500/20 text-orange-500 px-4 py-2 rounded-xl text-xs font-bold">Anexar Foto Frente Documento</button>
+              <button className="bg-orange-500/20 text-orange-500 px-4 py-2 rounded-xl text-xs font-bold">Anexar Foto Verso Documento</button>
+            </div>
+          </div>
+
+          <button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2">
+            <Save size={20} /> Salvar Minha Ficha
+          </button>
+          <button onClick={() => setStep('menu')} className="w-full bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl">VOLTAR</button>
+        </div>
+      )}
+    </div>
+  );
+};
