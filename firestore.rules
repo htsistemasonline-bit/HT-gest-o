@@ -68,6 +68,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    match /portfolio/{workId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // Default deny
     match /{path=**} {
       allow read, write: if false;

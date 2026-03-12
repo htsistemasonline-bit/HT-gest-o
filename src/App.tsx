@@ -11,6 +11,7 @@ import Webcam from 'react-webcam';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
   LayoutDashboard, 
+  Bell,
   Calendar, 
   Users, 
   Package, 
@@ -58,17 +59,57 @@ import {
   UserCog,
   Home,
   UserPlus,
+  TrendingUp,
+  TrendingDown,
   RefreshCw,
   Send,
-  User
+  User,
+  Instagram,
+  Images,
+  Share
 } from 'lucide-react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { auth, db } from './firebase';
-import { onAuthStateChanged, signOut, signInAnonymously } from 'firebase/auth';
+import { onAuthStateChanged, signOut, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { collection, addDoc, query, where, onSnapshot, orderBy, limit, getDocs, deleteDoc, doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 
 // --- Components ---
+
+const Login = () => {
+  const handleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Erro ao fazer login:", error);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#1a1d21] flex items-center justify-center p-4">
+      <div className="bg-[#252930] p-10 rounded-3xl border border-white/5 text-center max-w-md w-full space-y-8 shadow-2xl">
+        <div className="flex justify-center">
+          <div className="w-20 h-20 bg-orange-500/20 rounded-2xl flex items-center justify-center">
+            <Lock size={40} className="text-orange-500" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-3xl font-black text-white tracking-tight">GESTÃO STUDIO</h2>
+          <p className="text-gray-400 text-sm">Acesse sua conta administrativa para gerenciar seu estúdio.</p>
+        </div>
+        <button 
+          onClick={handleLogin}
+          className="w-full bg-white text-black font-bold py-4 rounded-2xl flex items-center justify-center gap-3 hover:bg-gray-200 transition-all shadow-lg"
+        >
+          <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
+          Entrar com Google
+        </button>
+        <p className="text-[10px] text-gray-600 uppercase tracking-widest">Acesso restrito a administradores</p>
+      </div>
+    </div>
+  );
+};
 
 const SidebarItem = ({ icon: Icon, label, active, onClick, badge }: any) => (
   <button
@@ -266,7 +307,6 @@ const Dashboard = () => {
   const [caixaStatus, setCaixaStatus] = useState<'Aberto' | 'Fechado'>('Fechado');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [user, setUser] = useState<any>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [clientSearch, setClientSearch] = useState('');
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<any>(null);
@@ -290,29 +330,27 @@ const Dashboard = () => {
     });
   }, []);
 
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    return onAuthStateChanged(auth, (u) => {
-      if (u) {
-        setUser(u);
-        setIsLoggedIn(true);
-      }
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setLoading(false);
     });
+    return () => unsubscribe();
   }, []);
 
-  const handleLogin = async () => {
-    try {
-      await signInAnonymously(auth);
-      setIsLoggedIn(true);
-    } catch (error: any) {
-      if (error.code === 'auth/admin-restricted-operation') {
-        console.warn("A autenticação anônima está desativada no Console do Firebase. Continuando com sessão local.");
-      } else {
-        console.error("Erro ao entrar:", error);
-      }
-      // Fallback to local state if Firebase Auth fails or is disabled
-      setIsLoggedIn(true);
-    }
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0f1115] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
 
   const monthlyRevenue = budgets
     .filter(b => b.status === 'Aprovado' && new Date(b.createdAt).getMonth() === new Date().getMonth() && new Date(b.createdAt).getFullYear() === new Date().getFullYear())
@@ -337,31 +375,6 @@ const Dashboard = () => {
     XLSX.writeFile(workbook, "Clientes.xlsx");
   };
 
-  const handleLogout = () => {
-    signOut(auth);
-    setIsLoggedIn(false);
-    setUser(null);
-  };
-
-  if (!isLoggedIn) {
-    return (
-      <div className="min-h-screen bg-[#0f1115] flex items-center justify-center p-4">
-        <div className="bg-[#1a1d21] p-10 rounded-3xl shadow-2xl border border-white/5 text-center max-w-md w-full">
-          <div className="w-20 h-20 bg-orange-500/20 rounded-2xl flex items-center justify-center mx-auto mb-8 rotate-12">
-            <Lock size={40} className="text-orange-500" />
-          </div>
-          <h1 className="text-3xl font-black text-white mb-8 tracking-tight">HT Gestão</h1>
-          <button
-            onClick={handleLogin}
-            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-orange-500/20 flex items-center justify-center gap-3 uppercase tracking-widest font-aurora text-xl"
-          >
-            Entrar
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-[#0f1115] flex text-gray-100 font-sans">
       {/* Sidebar */}
@@ -370,16 +383,34 @@ const Dashboard = () => {
         animate={{ width: sidebarOpen ? 280 : 0, opacity: sidebarOpen ? 1 : 0 }}
         className="bg-[#1a1d21] border-r border-white/5 overflow-hidden flex flex-col h-screen sticky top-0"
       >
-        <div className="p-6 flex items-center gap-3">
-          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/30">
-            <LayoutDashboard size={24} className="text-white" />
-          </div>
-          <span className="text-xl font-black tracking-tighter">HT GESTÃO</span>
+        <div className="p-4 flex items-center justify-center min-h-[100px]">
+          <img 
+            src="/logo.png" 
+            alt="Gestão Studio" 
+            className="w-full h-auto max-h-24 object-contain"
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              const target = e.currentTarget;
+              const parent = target.parentElement;
+              if (parent) {
+                target.style.display = 'none';
+                if (!parent.querySelector('.fallback-logo')) {
+                  const fallback = document.createElement('div');
+                  fallback.className = 'fallback-logo flex items-center gap-3';
+                  fallback.innerHTML = `
+                    <span class="text-4xl font-black text-[#00cc66] leading-none">HT</span>
+                    <span class="text-xl font-black tracking-tighter leading-none">Gestão Studio</span>
+                  `;
+                  parent.appendChild(fallback);
+                }
+              }
+            }}
+          />
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 pb-6 custom-scrollbar">
           <SectionTitle>Principal</SectionTitle>
-          <SidebarItem icon={LayoutDashboard} label="Início" active={activeTab === 'Início'} onClick={() => setActiveTab('Início')} />
+          <SidebarItem icon={Bell} label="Início" active={activeTab === 'Início'} onClick={() => setActiveTab('Início')} />
           
           <SectionTitle>Formulários</SectionTitle>
           <SidebarItem icon={ClipboardList} label="Formulários" active={activeTab === 'Formulários'} onClick={() => setActiveTab('Formulários')} />
@@ -387,7 +418,7 @@ const Dashboard = () => {
           <SidebarItem icon={PlusCircle} label="Criador de Formulários" active={activeTab === 'Criador de Formulários'} onClick={() => setActiveTab('Criador de Formulários')} />
           
           <SectionTitle>Presença Online</SectionTitle>
-          <SidebarItem icon={Globe} label="Seu Site" active={activeTab === 'Seu Site'} onClick={() => setActiveTab('Seu Site')} />
+          <SidebarItem icon={Camera} label="Meus trabalhos" active={activeTab === 'Meus trabalhos'} onClick={() => setActiveTab('Meus trabalhos')} />
           <SidebarItem icon={BookOpen} label="Seu Catálogo" active={activeTab === 'Seu Catálogo'} onClick={() => setActiveTab('Seu Catálogo')} />
           
           <SectionTitle>Operacional</SectionTitle>
@@ -422,8 +453,8 @@ const Dashboard = () => {
 
         <div className="p-4 border-t border-white/5">
           <button 
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-2 text-gray-400 hover:text-red-400 transition-colors"
+            onClick={() => signOut(auth)}
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-gray-400 hover:bg-red-500/10 hover:text-red-500 transition-all"
           >
             <LogOut size={18} />
             <span className="text-sm font-medium">Sair</span>
@@ -438,35 +469,30 @@ const Dashboard = () => {
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 hover:bg-white/5 rounded-lg text-gray-400 transition-colors"
+              className="p-2 hover:bg-white/5 rounded-lg text-[#00cc66] transition-colors"
             >
-              <div className="space-y-1">
-                <div className="w-6 h-0.5 bg-current"></div>
-                <div className="w-6 h-0.5 bg-current"></div>
-                <div className="w-6 h-0.5 bg-current"></div>
+              <div className="space-y-1.5">
+                <div className="w-6 h-1 bg-current rounded-full"></div>
+                <div className="w-6 h-1 bg-current rounded-full"></div>
+                <div className="w-6 h-1 bg-current rounded-full"></div>
               </div>
             </button>
-            <h2 className="text-lg font-bold text-white">{activeTab}</h2>
           </div>
 
           <div className="flex items-center gap-6">
-            <div className="relative hidden md:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-              <input 
-                type="text" 
-                placeholder="Buscar..." 
-                className="bg-[#0f1115] border border-white/5 rounded-full pl-10 pr-4 py-1.5 text-sm focus:border-orange-500 outline-none w-64 transition-all"
-              />
-            </div>
+            <button className="p-2 text-gray-400 hover:text-white transition-colors relative">
+              <Bell size={20} />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-orange-500 rounded-full border-2 border-[#1a1d21]"></span>
+            </button>
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
                 <p className="text-xs font-bold text-white leading-none">{user?.displayName || 'Administrador'}</p>
-                <p className="text-[10px] text-gray-500 mt-1">HT Gestão</p>
+                <p className="text-[10px] text-gray-500 mt-1">Gestão Studio</p>
               </div>
               {user?.photoURL ? (
                 <img src={user.photoURL} alt="Avatar" className="w-8 h-8 rounded-lg border border-white/10" />
               ) : (
-                <div className="w-8 h-8 rounded-lg border border-white/10 bg-orange-500/20 flex items-center justify-center text-orange-500 font-bold text-xs">
+                <div className="w-8 h-8 rounded-lg border border-white/10 bg-[#00cc66]/20 flex items-center justify-center text-[#00cc66] font-bold text-xs">
                   HT
                 </div>
               )}
@@ -489,7 +515,7 @@ const Dashboard = () => {
                   {/* Quick Actions (Now at the top) */}
                   <div className="col-span-1 lg:col-span-4 bg-[#1a1d21] rounded-3xl p-8 border border-white/5">
                     <h3 className="text-xl font-bold mb-6">Ações Rápidas</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                       <QuickAction icon={PlusCircle} label="Novo Agendamento" onClick={() => setActiveTab('Agenda')} />
                       <QuickAction 
                         icon={UserCheck} 
@@ -501,6 +527,12 @@ const Dashboard = () => {
                       />
                       <QuickAction icon={FileText} label="Novo Orçamento" onClick={() => setActiveTab('Orçamentos')} />
                       <QuickAction icon={DollarSign} label="Lançar Despesa" onClick={() => setActiveTab('Financeiro')} />
+                      <QuickAction 
+                        icon={caixaStatus === 'Aberto' ? Lock : PlusCircle} 
+                        label={caixaStatus === 'Aberto' ? "Fechar Caixa" : "Abrir Caixa"} 
+                        onClick={() => setActiveTab('Caixa Diário')} 
+                        color={caixaStatus === 'Aberto' ? 'red' : 'green'}
+                      />
                     </div>
                   </div>
                   
@@ -672,12 +704,21 @@ const Dashboard = () => {
               )}
 
               {activeTab === 'Caixa Diário' && (
-                <CaixaDiario status={caixaStatus} setStatus={setCaixaStatus} />
+                <CaixaDiario status={caixaStatus} setStatus={setCaixaStatus} setActiveTab={setActiveTab} />
+              )}
+              {activeTab === 'Financeiro' && (
+                <FinanceiroView caixaStatus={caixaStatus} />
+              )}
+              {activeTab === 'Estoque' && (
+                <InventoryView />
               )}
               {activeTab === 'Atendimentos' && (
                 <AtendimentosView />
               )}
-              {activeTab !== 'Início' && activeTab !== 'Cadastros' && activeTab !== 'Formulários' && activeTab !== 'Criador de Formulários' && activeTab !== 'Clientes' && activeTab !== 'Aniversariantes' && activeTab !== 'Caixa Diário' && activeTab !== 'Atendimentos' && (
+              {activeTab === 'Meus trabalhos' && (
+                <MeusTrabalhosView />
+              )}
+              {activeTab !== 'Início' && activeTab !== 'Cadastros' && activeTab !== 'Formulários' && activeTab !== 'Criador de Formulários' && activeTab !== 'Clientes' && activeTab !== 'Aniversariantes' && activeTab !== 'Caixa Diário' && activeTab !== 'Atendimentos' && activeTab !== 'Meus trabalhos' && (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                   <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mb-6">
                     <Settings size={40} className="text-gray-600" />
@@ -690,6 +731,651 @@ const Dashboard = () => {
           </AnimatePresence>
         </div>
       </main>
+    </div>
+  );
+};
+
+const MeusTrabalhosView = () => {
+  const [works, setWorks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newWork, setNewWork] = useState({ title: '', url: '', category: 'Tattoo' });
+
+  useEffect(() => {
+    const q = query(collection(db, 'portfolio'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const worksData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setWorks(worksData);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleAddWork = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await addDoc(collection(db, 'portfolio'), {
+        ...newWork,
+        createdAt: new Date().toISOString()
+      });
+      setShowAddModal(false);
+      setNewWork({ title: '', url: '', category: 'Tattoo' });
+    } catch (error) {
+      console.error("Error adding work:", error);
+    }
+  };
+
+  const handleDeleteWork = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'portfolio', id));
+    } catch (error) {
+      console.error("Error deleting work:", error);
+    }
+  };
+
+  const copyPortfolioLink = () => {
+    const link = `${window.location.origin}/portfolio`;
+    navigator.clipboard.writeText(link);
+    alert("Link do portfólio copiado para a área de transferência!");
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#1a1d21] p-6 rounded-3xl border border-white/5">
+        <div>
+          <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+            <Camera className="text-orange-500" />
+            Meu Portfólio de Trabalhos
+          </h3>
+          <p className="text-gray-500 text-sm">Gerencie as fotos que seus clientes verão no seu link público.</p>
+        </div>
+        <div className="flex gap-3 w-full md:w-auto">
+          <button 
+            onClick={copyPortfolioLink}
+            className="flex-1 md:flex-none bg-white/5 hover:bg-white/10 text-white px-6 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+          >
+            <Share size={20} />
+            Gerar Link para Clientes
+          </button>
+          <button 
+            onClick={() => setShowAddModal(true)}
+            className="flex-1 md:flex-none bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20"
+          >
+            <Plus size={20} />
+            Adicionar Trabalho
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <RefreshCw className="animate-spin text-orange-500" size={40} />
+        </div>
+      ) : works.length === 0 ? (
+        <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-20 text-center">
+          <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mx-auto mb-6">
+            <Images size={40} className="text-gray-600" />
+          </div>
+          <h3 className="text-xl font-bold text-white mb-2">Nenhum trabalho cadastrado</h3>
+          <p className="text-gray-500 max-w-sm mx-auto mb-8">Comece adicionando suas melhores tatuagens para criar um portfólio incrível para seus clientes.</p>
+          <button 
+            onClick={() => setShowAddModal(true)}
+            className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-xl font-bold transition-all"
+          >
+            Adicionar Primeiro Trabalho
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {works.map((work) => (
+            <motion.div 
+              key={work.id}
+              layout
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="group relative aspect-square bg-[#1a1d21] rounded-3xl overflow-hidden border border-white/5"
+            >
+              <img 
+                src={work.url} 
+                alt={work.title} 
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                referrerPolicy="no-referrer"
+              />
+              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-4 text-center">
+                <h4 className="text-white font-bold mb-1">{work.title}</h4>
+                <span className="text-orange-500 text-xs font-bold uppercase tracking-wider mb-4">{work.category}</span>
+                <button 
+                  onClick={() => handleDeleteWork(work.id)}
+                  className="bg-red-500/20 hover:bg-red-500 text-red-500 hover:text-white p-3 rounded-xl transition-all"
+                >
+                  <Trash2 size={20} />
+                </button>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-[#1a1d21] w-full max-w-md rounded-3xl border border-white/10 overflow-hidden"
+          >
+            <div className="p-6 border-b border-white/5 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-white">Novo Trabalho</h3>
+              <button onClick={() => setShowAddModal(false)} className="text-gray-500 hover:text-white">
+                <X size={24} />
+              </button>
+            </div>
+            <form onSubmit={handleAddWork} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">Título do Trabalho</label>
+                <input 
+                  required
+                  type="text" 
+                  className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
+                  placeholder="Ex: Realismo no Braço"
+                  value={newWork.title}
+                  onChange={e => setNewWork({...newWork, title: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">URL da Imagem</label>
+                <input 
+                  required
+                  type="url" 
+                  className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
+                  placeholder="https://exemplo.com/foto.jpg"
+                  value={newWork.url}
+                  onChange={e => setNewWork({...newWork, url: e.target.value})}
+                />
+                <p className="text-[10px] text-gray-500 mt-1">Dica: Use links do Google Drive, Dropbox ou sites de hospedagem de imagens.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">Categoria</label>
+                <select 
+                  className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all appearance-none"
+                  value={newWork.category}
+                  onChange={e => setNewWork({...newWork, category: e.target.value})}
+                >
+                  <option>Tattoo</option>
+                  <option>Piercing</option>
+                  <option>Desenho</option>
+                  <option>Outros</option>
+                </select>
+              </div>
+              <button 
+                type="submit"
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-orange-500/20 mt-4"
+              >
+                Salvar no Portfólio
+              </button>
+            </form>
+          </motion.div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const FinanceiroView = ({ caixaStatus }: { caixaStatus: 'Aberto' | 'Fechado' }) => {
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const [goals, setGoals] = useState({ monthly: 5000, annual: 60000 });
+  const [showGoalModal, setShowGoalModal] = useState(false);
+  const [showTransactionModal, setShowTransactionModal] = useState<{show: boolean, type: 'entrada' | 'saida'}>({show: false, type: 'entrada'});
+  const [newTransaction, setNewTransaction] = useState({ description: '', amount: '', category: '' });
+
+  useEffect(() => {
+    const q = query(collection(db, 'transactions'), orderBy('date', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setTransactions(data);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, 'inventory'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setInventoryItems(data);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const getGoals = async () => {
+      const docRef = doc(db, 'settings', 'financial_goals');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setGoals(docSnap.data() as any);
+      }
+    };
+    getGoals();
+  }, []);
+
+  const handleSaveGoals = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await setDoc(doc(db, 'settings', 'financial_goals'), goals);
+    setShowGoalModal(false);
+  };
+
+  const handleAddTransaction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (caixaStatus === 'Fechado') {
+      alert("O caixa está fechado! Abra o caixa para realizar lançamentos.");
+      return;
+    }
+    await addDoc(collection(db, 'transactions'), {
+      ...newTransaction,
+      amount: parseFloat(newTransaction.amount),
+      type: showTransactionModal.type,
+      date: new Date().toISOString(),
+    });
+    setShowTransactionModal({show: false, type: 'entrada'});
+    setNewTransaction({ description: '', amount: '', category: '' });
+  };
+
+  const totalRevenue = transactions.filter(t => t.type === 'entrada').reduce((acc, t) => acc + t.amount, 0);
+  const totalExpense = transactions.filter(t => t.type === 'saida').reduce((acc, t) => acc + t.amount, 0);
+  const balance = totalRevenue - totalExpense;
+  const inventoryCost = inventoryItems.reduce((acc, item) => acc + (item.quantity * (item.costPrice || 10)), 0);
+
+  const today = new Date().toISOString().split('T')[0];
+  const todayTransactions = transactions.filter(t => t.date.startsWith(today));
+  const todayRevenue = todayTransactions.filter(t => t.type === 'entrada').reduce((acc, t) => acc + t.amount, 0);
+  const todayExpense = todayTransactions.filter(t => t.type === 'saida').reduce((acc, t) => acc + t.amount, 0);
+
+  const monthlyProgress = Math.min((totalRevenue / goals.monthly) * 100, 100);
+  const annualProgress = Math.min((totalRevenue / (goals.annual || 1)) * 100, 100);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#1a1d21] p-6 rounded-3xl border border-white/5">
+        <div>
+          <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+            <DollarSign className="text-emerald-500" />
+            Gestor Financeiro Profissional
+          </h3>
+          <p className="text-gray-500 text-sm">Controle total de receitas, despesas e metas do seu estúdio.</p>
+        </div>
+        <div className="flex flex-wrap gap-3 w-full md:w-auto">
+          <button 
+            onClick={() => setShowGoalModal(true)}
+            className="flex-1 md:flex-none bg-white/5 hover:bg-white/10 text-white px-6 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+          >
+            <Target size={20} />
+            Definir Metas
+          </button>
+          <button 
+            disabled={caixaStatus === 'Fechado'}
+            onClick={() => setShowTransactionModal({show: true, type: 'saida'})}
+            className={`flex-1 md:flex-none px-6 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${caixaStatus === 'Fechado' ? 'bg-gray-500/20 text-gray-500 cursor-not-allowed' : 'bg-red-500/20 hover:bg-red-500 text-red-500 hover:text-white'}`}
+          >
+            <TrendingDown size={20} />
+            Despesa (Saída)
+          </button>
+          <button 
+            disabled={caixaStatus === 'Fechado'}
+            onClick={() => setShowTransactionModal({show: true, type: 'entrada'})}
+            className={`flex-1 md:flex-none px-6 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${caixaStatus === 'Fechado' ? 'bg-gray-500/20 text-gray-500 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20'}`}
+          >
+            <TrendingUp size={20} />
+            Receita (Entrada)
+          </button>
+        </div>
+      </div>
+
+      {caixaStatus === 'Fechado' && (
+        <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl flex items-center gap-3 text-red-500">
+          <Lock size={20} />
+          <p className="text-sm font-bold">O caixa está fechado. Abra o caixa no menu "Caixa Diário" para realizar novos lançamentos financeiros.</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard title="Receita Total" value={`R$ ${totalRevenue.toLocaleString()}`} trend="+12%" icon={TrendingUp} color="green" />
+        <StatCard title="Despesa Total" value={`R$ ${totalExpense.toLocaleString()}`} trend="-5%" icon={TrendingDown} color="orange" />
+        <StatCard title="Saldo Atual" value={`R$ ${balance.toLocaleString()}`} trend="Balanço" icon={DollarSign} color="blue" />
+        <StatCard title="Investimento Estoque" value={`R$ ${inventoryCost.toLocaleString()}`} trend="Estoque" icon={Package} color="purple" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-[#1a1d21] p-8 rounded-3xl border border-white/5">
+          <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+            <Target className="text-orange-500" />
+            Acompanhamento de Metas
+          </h3>
+          <div className="space-y-8">
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <div>
+                  <p className="text-gray-500 text-xs font-bold uppercase">Meta Mensal</p>
+                  <p className="text-white font-black text-xl">R$ {totalRevenue.toLocaleString()} / R$ {goals.monthly.toLocaleString()}</p>
+                </div>
+                <span className="text-orange-500 font-bold">{monthlyProgress.toFixed(1)}%</span>
+              </div>
+              <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${monthlyProgress}%` }}
+                  className="h-full bg-orange-500"
+                ></motion.div>
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <div>
+                  <p className="text-gray-500 text-xs font-bold uppercase">Meta Anual</p>
+                  <p className="text-white font-black text-xl">R$ {totalRevenue.toLocaleString()} / R$ {goals.annual.toLocaleString()}</p>
+                </div>
+                <span className="text-emerald-500 font-bold">{annualProgress.toFixed(1)}%</span>
+              </div>
+              <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${annualProgress}%` }}
+                  className="h-full bg-emerald-500"
+                ></motion.div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-[#1a1d21] p-8 rounded-3xl border border-white/5">
+          <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+            <Clock className="text-blue-500" />
+            Resumo do Dia ({new Date().toLocaleDateString()})
+          </h3>
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="bg-[#0f1115] p-4 rounded-2xl border border-white/5">
+              <p className="text-gray-500 text-[10px] font-bold uppercase mb-1">Entrou Hoje</p>
+              <p className="text-emerald-500 font-black text-lg">R$ {todayRevenue.toLocaleString()}</p>
+            </div>
+            <div className="bg-[#0f1115] p-4 rounded-2xl border border-white/5">
+              <p className="text-gray-500 text-[10px] font-bold uppercase mb-1">Saiu Hoje</p>
+              <p className="text-red-500 font-black text-lg">R$ {todayExpense.toLocaleString()}</p>
+            </div>
+          </div>
+          <div className="space-y-3 max-h-[150px] overflow-y-auto custom-scrollbar pr-2">
+            {todayTransactions.length === 0 ? (
+              <p className="text-gray-500 text-center py-4 text-sm italic">Nenhuma movimentação hoje.</p>
+            ) : (
+              todayTransactions.map(t => (
+                <div key={t.id} className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/5">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${t.type === 'entrada' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                      {t.type === 'entrada' ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                    </div>
+                    <div>
+                      <p className="text-white text-xs font-bold">{t.description}</p>
+                      <p className="text-gray-500 text-[10px]">{t.category}</p>
+                    </div>
+                  </div>
+                  <p className={`text-xs font-bold ${t.type === 'entrada' ? 'text-emerald-500' : 'text-red-500'}`}>
+                    {t.type === 'entrada' ? '+' : '-'} R$ {t.amount.toLocaleString()}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-[#1a1d21] rounded-3xl border border-white/5 overflow-hidden">
+        <div className="p-6 border-b border-white/5 flex justify-between items-center">
+          <h3 className="text-xl font-bold text-white">Histórico de Lançamentos</h3>
+          <div className="flex gap-2">
+            <button className="p-2 bg-white/5 rounded-lg text-gray-400 hover:text-white"><Search size={18} /></button>
+            <button className="p-2 bg-white/5 rounded-lg text-gray-400 hover:text-white"><Download size={18} /></button>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-[#0f1115] text-gray-500 text-[10px] font-bold uppercase tracking-wider">
+              <tr>
+                <th className="px-6 py-4">Data</th>
+                <th className="px-6 py-4">Descrição</th>
+                <th className="px-6 py-4">Categoria</th>
+                <th className="px-6 py-4">Tipo</th>
+                <th className="px-6 py-4 text-right">Valor</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {transactions.map(t => (
+                <tr key={t.id} className="hover:bg-white/5 transition-all">
+                  <td className="px-6 py-4 text-xs text-gray-400">{new Date(t.date).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-xs font-bold text-white">{t.description}</td>
+                  <td className="px-6 py-4">
+                    <span className="px-2 py-1 bg-white/5 rounded-lg text-[10px] text-gray-400">{t.category}</span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${t.type === 'entrada' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                      {t.type === 'entrada' ? 'Receita' : 'Despesa'}
+                    </span>
+                  </td>
+                  <td className={`px-6 py-4 text-xs font-bold text-right ${t.type === 'entrada' ? 'text-emerald-500' : 'text-red-500'}`}>
+                    R$ {t.amount.toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Modals */}
+      {showGoalModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#1a1d21] w-full max-w-md rounded-3xl border border-white/10 overflow-hidden">
+            <div className="p-6 border-b border-white/5 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-white">Configurar Metas</h3>
+              <button onClick={() => setShowGoalModal(false)} className="text-gray-500 hover:text-white"><X size={24} /></button>
+            </div>
+            <form onSubmit={handleSaveGoals} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">Meta Mensal (R$)</label>
+                <input required type="number" className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none" value={goals.monthly} onChange={e => setGoals({...goals, monthly: parseFloat(e.target.value)})} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">Meta Anual (R$)</label>
+                <input required type="number" className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none" value={goals.annual} onChange={e => setGoals({...goals, annual: parseFloat(e.target.value)})} />
+              </div>
+              <button type="submit" className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-orange-500/20 mt-4">Salvar Metas</button>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {showTransactionModal.show && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#1a1d21] w-full max-w-md rounded-3xl border border-white/10 overflow-hidden">
+            <div className="p-6 border-b border-white/5 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-white">Lançar {showTransactionModal.type === 'entrada' ? 'Receita' : 'Despesa'}</h3>
+              <button onClick={() => setShowTransactionModal({show: false, type: 'entrada'})} className="text-gray-500 hover:text-white"><X size={24} /></button>
+            </div>
+            <form onSubmit={handleAddTransaction} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">Descrição</label>
+                <input required type="text" className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none" placeholder="Ex: Pagamento Tatuagem" value={newTransaction.description} onChange={e => setNewTransaction({...newTransaction, description: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">Valor (R$)</label>
+                <input required type="number" step="0.01" className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none" placeholder="0,00" value={newTransaction.amount} onChange={e => setNewTransaction({...newTransaction, amount: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">Categoria</label>
+                <select className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none appearance-none" value={newTransaction.category} onChange={e => setNewTransaction({...newTransaction, category: e.target.value})}>
+                  <option value="">Selecione...</option>
+                  {showTransactionModal.type === 'entrada' ? (
+                    <>
+                      <option value="Serviço">Serviço</option>
+                      <option value="Venda Produto">Venda Produto</option>
+                      <option value="Outros">Outros</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="Aluguel">Aluguel</option>
+                      <option value="Materiais">Materiais</option>
+                      <option value="Marketing">Marketing</option>
+                      <option value="Estoque">Estoque</option>
+                      <option value="Outros">Outros</option>
+                    </>
+                  )}
+                </select>
+              </div>
+              <button type="submit" className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-orange-500/20 mt-4">Confirmar Lançamento</button>
+            </form>
+          </motion.div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const InventoryView = () => {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newItem, setNewItem] = useState({ item: '', quantity: 0, unit: 'un', minQuantity: 5, costPrice: 0 });
+
+  useEffect(() => {
+    const q = query(collection(db, 'inventory'), orderBy('item', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setItems(data);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleAddItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await addDoc(collection(db, 'inventory'), newItem);
+    setShowAddModal(false);
+    setNewItem({ item: '', quantity: 0, unit: 'un', minQuantity: 5, costPrice: 0 });
+  };
+
+  const handleDeleteItem = async (id: string) => {
+    if (confirm("Deseja excluir este item do estoque?")) {
+      await deleteDoc(doc(db, 'inventory', id));
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#1a1d21] p-6 rounded-3xl border border-white/5">
+        <div>
+          <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+            <Package className="text-purple-500" />
+            Gestão de Estoque
+          </h3>
+          <p className="text-gray-500 text-sm">Controle de materiais, insumos e custos de reposição.</p>
+        </div>
+        <button 
+          onClick={() => setShowAddModal(true)}
+          className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20"
+        >
+          <Plus size={20} />
+          Adicionar Item
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-[#1a1d21] p-6 rounded-3xl border border-white/5">
+          <p className="text-gray-500 text-xs font-bold uppercase mb-1">Total de Itens</p>
+          <p className="text-2xl font-black text-white">{items.length}</p>
+        </div>
+        <div className="bg-[#1a1d21] p-6 rounded-3xl border border-white/5">
+          <p className="text-gray-500 text-xs font-bold uppercase mb-1">Itens em Alerta</p>
+          <p className="text-2xl font-black text-red-500">{items.filter(i => i.quantity <= i.minQuantity).length}</p>
+        </div>
+        <div className="bg-[#1a1d21] p-6 rounded-3xl border border-white/5">
+          <p className="text-gray-500 text-xs font-bold uppercase mb-1">Valor Total em Estoque</p>
+          <p className="text-2xl font-black text-emerald-500">R$ {items.reduce((acc, i) => acc + (i.quantity * (i.costPrice || 0)), 0).toLocaleString()}</p>
+        </div>
+      </div>
+
+      <div className="bg-[#1a1d21] rounded-3xl border border-white/5 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-[#0f1115] text-gray-500 text-[10px] font-bold uppercase tracking-wider">
+              <tr>
+                <th className="px-6 py-4">Item</th>
+                <th className="px-6 py-4">Quantidade</th>
+                <th className="px-6 py-4">Mínimo</th>
+                <th className="px-6 py-4">Preço de Custo</th>
+                <th className="px-6 py-4">Total</th>
+                <th className="px-6 py-4 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {items.map(item => (
+                <tr key={item.id} className="hover:bg-white/5 transition-all">
+                  <td className="px-6 py-4">
+                    <p className="text-white text-sm font-bold">{item.item}</p>
+                    <p className="text-gray-500 text-[10px]">{item.unit}</p>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 rounded-lg text-xs font-bold ${item.quantity <= item.minQuantity ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                      {item.quantity} {item.unit}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-xs text-gray-400">{item.minQuantity} {item.unit}</td>
+                  <td className="px-6 py-4 text-xs text-white">R$ {(item.costPrice || 0).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-xs font-bold text-white">R$ {(item.quantity * (item.costPrice || 0)).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right">
+                    <button onClick={() => handleDeleteItem(item.id)} className="p-2 text-gray-500 hover:text-red-500 transition-all">
+                      <Trash2 size={18} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#1a1d21] w-full max-w-md rounded-3xl border border-white/10 overflow-hidden">
+            <div className="p-6 border-b border-white/5 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-white">Novo Item no Estoque</h3>
+              <button onClick={() => setShowAddModal(false)} className="text-gray-500 hover:text-white"><X size={24} /></button>
+            </div>
+            <form onSubmit={handleAddItem} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">Nome do Item</label>
+                <input required type="text" className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none" placeholder="Ex: Agulha 3RL" value={newItem.item} onChange={e => setNewItem({...newItem, item: e.target.value})} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">Quantidade</label>
+                  <input required type="number" className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none" value={newItem.quantity} onChange={e => setNewItem({...newItem, quantity: parseInt(e.target.value)})} />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">Unidade</label>
+                  <input required type="text" className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none" placeholder="un, ml, cx" value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">Mínimo Alerta</label>
+                  <input required type="number" className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none" value={newItem.minQuantity} onChange={e => setNewItem({...newItem, minQuantity: parseInt(e.target.value)})} />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">Preço de Custo (R$)</label>
+                  <input required type="number" step="0.01" className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none" value={newItem.costPrice} onChange={e => setNewItem({...newItem, costPrice: parseFloat(e.target.value)})} />
+                </div>
+              </div>
+              <button type="submit" className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-orange-500/20 mt-4">Adicionar ao Estoque</button>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1365,7 +2051,7 @@ const BirthdayManager = () => {
   }, []);
 
   const sendBirthdayMessage = (client: any) => {
-    const message = `Parabéns, ${client.name}! 🎉\n\nA equipe HT Gestão deseja a você um dia incrível e cheio de realizações. Feliz aniversário! 🎂🎈`;
+    const message = `Parabéns, ${client.name}! 🎉\n\nA equipe Gestão Studio deseja a você um dia incrível e cheio de realizações. Feliz aniversário! 🎂🎈`;
     const url = `https://wa.me/55${client.phone?.replace(/\D/g, '') || ''}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
@@ -1440,7 +2126,7 @@ const BirthdayManager = () => {
             <div className="p-6 bg-[#0f1115] rounded-2xl border border-white/5 relative">
               <div className="absolute -top-2 -left-2 w-4 h-4 bg-[#0f1115] rotate-45 border-l border-t border-white/5"></div>
               <p className="text-sm text-gray-400 italic leading-relaxed">
-                "Parabéns, <span className="text-orange-500 font-bold">[Nome do Cliente]</span>! 🎉 A equipe HT Gestão deseja a você um dia incrível e cheio de realizações. Feliz aniversário! 🎂🎈"
+                "Parabéns, <span className="text-orange-500 font-bold">[Nome do Cliente]</span>! 🎉 A equipe Gestão Studio deseja a você um dia incrível e cheio de realizações. Feliz aniversário! 🎂🎈"
               </p>
             </div>
             <p className="text-[10px] text-gray-600 mt-4 text-center">A mensagem é aberta automaticamente no WhatsApp Web ou App.</p>
@@ -2211,48 +2897,124 @@ const ClientDetailsView = ({ onBack }: { onBack: () => void }) => {
   );
 };
 
-const CaixaDiario = ({ status, setStatus }: { status: 'Aberto' | 'Fechado', setStatus: (s: 'Aberto' | 'Fechado') => void }) => {
+const CaixaDiario = ({ status, setStatus, setActiveTab }: { status: 'Aberto' | 'Fechado', setStatus: (s: 'Aberto' | 'Fechado') => void, setActiveTab: (t: string) => void }) => {
   const [valorInicial, setValorInicial] = useState('');
   
+  const vendasMock = [
+    { id: 1, cliente: 'João Silva', valor: 150.00, metodo: 'Pix', hora: '10:30' },
+    { id: 2, cliente: 'Maria Oliveira', valor: 80.00, metodo: 'Cartão', hora: '11:45' },
+  ];
+
+  const totalVendas = vendasMock.reduce((acc, v) => acc + v.valor, 0);
+
   return (
     <div className="space-y-6">
       <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-8">
-        <h3 className="text-xl font-bold text-white mb-6">Caixa Diário</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-white">Caixa Diário</h3>
+          <div className={`px-4 py-1 rounded-full text-xs font-bold uppercase ${status === 'Aberto' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+            {status}
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-[#0f1115] p-4 rounded-xl border border-white/5">
-            <p className="text-xs text-gray-500 font-bold uppercase">Data Caixa</p>
-            <p className="text-white">{new Date().toLocaleDateString('pt-BR')}</p>
+            <p className="text-xs text-gray-500 font-bold uppercase mb-1">Data</p>
+            <p className="text-white font-bold">{new Date().toLocaleDateString('pt-BR')}</p>
           </div>
           <div className="bg-[#0f1115] p-4 rounded-xl border border-white/5">
-            <p className="text-xs text-gray-500 font-bold uppercase">Status Caixa</p>
-            <p className="text-white">{status}</p>
-          </div>
-          <div className="bg-[#0f1115] p-4 rounded-xl border border-white/5">
-            <p className="text-xs text-gray-500 font-bold uppercase">Valor Inicial</p>
+            <p className="text-xs text-gray-500 font-bold uppercase mb-1">Valor Inicial</p>
             {status === 'Fechado' ? (
-              <input 
-                type="text" 
-                value={valorInicial} 
-                onChange={(e) => setValorInicial(e.target.value)}
-                className="w-full bg-transparent text-white outline-none" 
-                placeholder="R$ 0,00"
-              />
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">R$</span>
+                <input 
+                  type="text" 
+                  value={valorInicial} 
+                  onChange={(e) => setValorInicial(e.target.value)}
+                  className="w-full bg-transparent text-white outline-none font-bold" 
+                  placeholder="0,00"
+                />
+              </div>
             ) : (
-              <p className="text-white">R$ {valorInicial || '0,00'}</p>
+              <p className="text-white font-bold">R$ {valorInicial || '0,00'}</p>
             )}
           </div>
+          <div className="bg-[#0f1115] p-4 rounded-xl border border-white/5">
+            <p className="text-xs text-gray-500 font-bold uppercase mb-1">Vendas Acumuladas</p>
+            <p className="text-emerald-500 font-bold">R$ {totalVendas.toFixed(2)}</p>
+          </div>
+          <div className="bg-[#0f1115] p-4 rounded-xl border border-white/5">
+            <p className="text-xs text-gray-500 font-bold uppercase mb-1">Saldo Atual</p>
+            <p className="text-white font-bold">R$ {(parseFloat(valorInicial.replace(',', '.') || '0') + totalVendas).toFixed(2)}</p>
+          </div>
         </div>
-        <div className="mt-6">
-          <button 
-            onClick={() => setStatus(status === 'Fechado' ? 'Aberto' : 'Fechado')}
-            className={`px-6 py-3 rounded-xl font-bold text-white ${status === 'Fechado' ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
-          >
-            {status === 'Fechado' ? 'Abrir o Caixa' : 'Fechar o Caixa'}
-          </button>
+
+        <div className="mt-8 flex gap-4">
+          {status === 'Fechado' ? (
+            <button 
+              onClick={() => setStatus('Aberto')}
+              className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 rounded-xl uppercase transition-all shadow-lg shadow-emerald-500/20"
+            >
+              Abrir o Caixa
+            </button>
+          ) : (
+            <>
+              <button 
+                className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold py-4 rounded-xl uppercase transition-all"
+              >
+                Lançar Movimentação
+              </button>
+              <button 
+                onClick={() => setStatus('Fechado')}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-4 rounded-xl uppercase transition-all shadow-lg shadow-red-500/20"
+              >
+                Fechar o Caixa
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {status === 'Aberto' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-8">
+            <h3 className="text-lg font-bold text-white mb-6">Vendas do Dia</h3>
+            <div className="space-y-4">
+              {vendasMock.map(venda => (
+                <div key={venda.id} className="flex justify-between items-center p-4 bg-[#0f1115] rounded-xl border border-white/5">
+                  <div>
+                    <p className="text-white font-bold">{venda.cliente}</p>
+                    <p className="text-xs text-gray-500">{venda.hora} - {venda.metodo}</p>
+                  </div>
+                  <p className="text-emerald-500 font-bold">R$ {venda.valor.toFixed(2)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-8">
+            <h3 className="text-lg font-bold text-white mb-6">Atendimentos em Aberto</h3>
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mb-4">
+                <Users size={32} className="text-gray-600" />
+              </div>
+              <p className="text-gray-500 text-sm">Nenhum atendimento em aberto no momento.</p>
+              <button 
+                onClick={() => setActiveTab('Atendimentos')}
+                className="mt-4 text-orange-500 font-bold text-sm hover:underline"
+              >
+                Ir para Atendimentos
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-8">
-        <h3 className="text-xl font-bold text-white mb-6">Histórico de operadores</h3>
+        <h3 className="text-xl font-bold text-white mb-6">Histórico de Fechamentos</h3>
+        <div className="text-center py-10">
+          <p className="text-gray-500">Nenhum fechamento registrado recentemente.</p>
+        </div>
       </div>
     </div>
   );
@@ -3088,9 +3850,9 @@ const PublicTracking = () => {
         </div>
 
         <div className="text-center space-y-6">
-          <h3 className="text-3xl font-black text-white uppercase tracking-tight">Veja mais em nosso <span className="text-orange-500">Instagram!</span></h3>
+          <h3 className="text-3xl font-black text-white uppercase tracking-tight">Veja mais do meu <span className="text-orange-500">Trabalho!</span></h3>
           <div className="w-24 h-24 bg-white/5 rounded-3xl mx-auto flex items-center justify-center text-gray-600">
-            <Target size={48} />
+            <Camera size={48} />
           </div>
         </div>
       </main>
@@ -3110,11 +3872,77 @@ export default function App() {
         <Route path="/track/:token" element={<PublicTracking />} />
         <Route path="/cadastro" element={<RegistrationForm />} />
         <Route path="/portal" element={<ClientPortal />} />
+        <Route path="/portfolio" element={<PublicPortfolio />} />
         <Route path="/*" element={<Dashboard />} />
       </Routes>
     </BrowserRouter>
   );
 }
+
+const PublicPortfolio = () => {
+  const [works, setWorks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const q = query(collection(db, 'portfolio'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const worksData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setWorks(worksData);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-[#0f1115] text-white p-4 md:p-8">
+      <header className="max-w-7xl mx-auto mb-12 text-center">
+        <div className="w-20 h-20 bg-orange-500/10 rounded-3xl flex items-center justify-center mx-auto mb-6">
+          <Camera size={40} className="text-orange-500" />
+        </div>
+        <h1 className="text-4xl font-black uppercase tracking-tighter mb-2">Meu Portfólio</h1>
+        <p className="text-gray-500">Conheça alguns dos meus melhores trabalhos</p>
+      </header>
+
+      <main className="max-w-7xl mx-auto">
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <RefreshCw className="animate-spin text-orange-500" size={40} />
+          </div>
+        ) : works.length === 0 ? (
+          <div className="text-center py-20 bg-[#1a1d21] rounded-3xl border border-white/5">
+            <p className="text-gray-500">Nenhum trabalho disponível no momento.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {works.map((work) => (
+              <motion.div 
+                key={work.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="group relative aspect-square bg-[#1a1d21] rounded-3xl overflow-hidden border border-white/5"
+              >
+                <img 
+                  src={work.url} 
+                  alt={work.title} 
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-black/80 to-transparent pt-12">
+                  <h4 className="text-white font-bold">{work.title}</h4>
+                  <span className="text-orange-500 text-xs font-bold uppercase tracking-wider">{work.category}</span>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </main>
+
+      <footer className="max-w-7xl mx-auto mt-20 py-8 border-t border-white/5 text-center">
+        <p className="text-gray-600 text-sm">© 2026 - Portfólio Profissional</p>
+      </footer>
+    </div>
+  );
+};
 
 const ClientPortal = () => {
   const [step, setStep] = useState('identify');
