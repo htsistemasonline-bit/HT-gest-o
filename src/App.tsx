@@ -70,46 +70,11 @@ import {
 } from 'lucide-react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { auth, db } from './firebase';
-import { onAuthStateChanged, signOut, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, addDoc, query, where, onSnapshot, orderBy, limit, getDocs, deleteDoc, doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 
 // --- Components ---
-
-const Login = () => {
-  const handleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Erro ao fazer login:", error);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-[#1a1d21] flex items-center justify-center p-4">
-      <div className="bg-[#252930] p-10 rounded-3xl border border-white/5 text-center max-w-md w-full space-y-8 shadow-2xl">
-        <div className="flex justify-center">
-          <div className="w-20 h-20 bg-orange-500/20 rounded-2xl flex items-center justify-center">
-            <Lock size={40} className="text-orange-500" />
-          </div>
-        </div>
-        <div className="space-y-2">
-          <h2 className="text-3xl font-black text-white tracking-tight">GESTÃO STUDIO</h2>
-          <p className="text-gray-400 text-sm">Acesse sua conta administrativa para gerenciar seu estúdio.</p>
-        </div>
-        <button 
-          onClick={handleLogin}
-          className="w-full bg-white text-black font-bold py-4 rounded-2xl flex items-center justify-center gap-3 hover:bg-gray-200 transition-all shadow-lg"
-        >
-          <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
-          Entrar com Google
-        </button>
-        <p className="text-[10px] text-gray-600 uppercase tracking-widest">Acesso restrito a administradores</p>
-      </div>
-    </div>
-  );
-};
 
 const SidebarItem = ({ icon: Icon, label, active, onClick, badge }: any) => (
   <button
@@ -346,10 +311,6 @@ const Dashboard = () => {
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500"></div>
       </div>
     );
-  }
-
-  if (!user) {
-    return <Login />;
   }
 
   const monthlyRevenue = budgets
