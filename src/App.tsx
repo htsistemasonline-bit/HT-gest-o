@@ -76,6 +76,29 @@ import { motion, AnimatePresence } from 'motion/react';
 
 // --- Components ---
 
+const Logo = ({ size = "normal" }: { size?: "normal" | "small" }) => {
+  const [error, setError] = useState(false);
+  
+  if (error) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className={`${size === 'normal' ? 'text-4xl' : 'text-2xl'} font-black text-[#00cc66] leading-none`}>HT</span>
+        <span className={`${size === 'normal' ? 'text-xl' : 'text-sm'} font-black tracking-tighter leading-none`}>Gestão Studio</span>
+      </div>
+    );
+  }
+
+  return (
+    <img 
+      src="/logo.png" 
+      alt="Gestão Studio" 
+      className={`w-full h-auto object-contain ${size === 'normal' ? 'max-h-24' : 'max-h-10'}`}
+      referrerPolicy="no-referrer"
+      onError={() => setError(true)}
+    />
+  );
+};
+
 const SidebarItem = ({ icon: Icon, label, active, onClick, badge }: any) => (
   <button
     onClick={onClick}
@@ -270,7 +293,7 @@ const RegistrationForm = () => {
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('Início');
   const [caixaStatus, setCaixaStatus] = useState<'Aberto' | 'Fechado'>('Fechado');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
   const [user, setUser] = useState<any>(null);
   const [clientSearch, setClientSearch] = useState('');
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -280,6 +303,13 @@ const Dashboard = () => {
   const [budgets, setBudgets] = useState<any[]>([]);
   const navigate = useNavigate();
   const location = useLocation();
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    if (window.innerWidth <= 768) {
+      setSidebarOpen(false);
+    }
+  };
 
   useEffect(() => {
     const q = query(collection(db, 'clients'), orderBy('createdAt', 'desc'));
@@ -338,78 +368,72 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-[#0f1115] flex text-gray-100 font-sans">
+      {/* Mobile Overlay */}
+      {sidebarOpen && window.innerWidth <= 768 && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-40"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <motion.aside 
         initial={false}
-        animate={{ width: sidebarOpen ? 280 : 0, opacity: sidebarOpen ? 1 : 0 }}
-        className="bg-[#1a1d21] border-r border-white/5 overflow-hidden flex flex-col h-screen sticky top-0"
+        animate={{ 
+          width: sidebarOpen ? 280 : 0, 
+          opacity: sidebarOpen ? 1 : 0,
+          x: sidebarOpen ? 0 : -280
+        }}
+        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+        className={`bg-[#1a1d21] border-r border-white/5 overflow-hidden flex flex-col h-screen z-50 ${
+          window.innerWidth <= 768 ? 'fixed left-0 top-0' : 'sticky top-0'
+        }`}
       >
         <div className="p-4 flex items-center justify-center min-h-[100px]">
-          <img 
-            src="/logo.png" 
-            alt="Gestão Studio" 
-            className="w-full h-auto max-h-24 object-contain"
-            referrerPolicy="no-referrer"
-            onError={(e) => {
-              const target = e.currentTarget;
-              const parent = target.parentElement;
-              if (parent) {
-                target.style.display = 'none';
-                if (!parent.querySelector('.fallback-logo')) {
-                  const fallback = document.createElement('div');
-                  fallback.className = 'fallback-logo flex items-center gap-3';
-                  fallback.innerHTML = `
-                    <span class="text-4xl font-black text-[#00cc66] leading-none">HT</span>
-                    <span class="text-xl font-black tracking-tighter leading-none">Gestão Studio</span>
-                  `;
-                  parent.appendChild(fallback);
-                }
-              }
-            }}
-          />
+          <Logo />
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 pb-6 custom-scrollbar">
           <SectionTitle>Principal</SectionTitle>
-          <SidebarItem icon={Bell} label="Início" active={activeTab === 'Início'} onClick={() => setActiveTab('Início')} />
+          <SidebarItem icon={Bell} label="Início" active={activeTab === 'Início'} onClick={() => handleTabChange('Início')} />
           
           <SectionTitle>Formulários</SectionTitle>
-          <SidebarItem icon={ClipboardList} label="Formulários" active={activeTab === 'Formulários'} onClick={() => setActiveTab('Formulários')} />
-          <SidebarItem icon={LinkIcon} label="Formulários p/ Clientes" active={activeTab === 'Formulários p/ Clientes'} onClick={() => setActiveTab('Formulários p/ Clientes')} />
-          <SidebarItem icon={PlusCircle} label="Criador de Formulários" active={activeTab === 'Criador de Formulários'} onClick={() => setActiveTab('Criador de Formulários')} />
+          <SidebarItem icon={ClipboardList} label="Formulários" active={activeTab === 'Formulários'} onClick={() => handleTabChange('Formulários')} />
+          <SidebarItem icon={LinkIcon} label="Formulários p/ Clientes" active={activeTab === 'Formulários p/ Clientes'} onClick={() => handleTabChange('Formulários p/ Clientes')} />
+          <SidebarItem icon={PlusCircle} label="Criador de Formulários" active={activeTab === 'Criador de Formulários'} onClick={() => handleTabChange('Criador de Formulários')} />
           
           <SectionTitle>Presença Online</SectionTitle>
-          <SidebarItem icon={Camera} label="Meus trabalhos" active={activeTab === 'Meus trabalhos'} onClick={() => setActiveTab('Meus trabalhos')} />
-          <SidebarItem icon={BookOpen} label="Seu Catálogo" active={activeTab === 'Seu Catálogo'} onClick={() => setActiveTab('Seu Catálogo')} />
+          <SidebarItem icon={Camera} label="Meus trabalhos" active={activeTab === 'Meus trabalhos'} onClick={() => handleTabChange('Meus trabalhos')} />
+          <SidebarItem icon={BookOpen} label="Seu Catálogo" active={activeTab === 'Seu Catálogo'} onClick={() => handleTabChange('Seu Catálogo')} />
           
           <SectionTitle>Operacional</SectionTitle>
-          <SidebarItem icon={Zap} label="Acesso Rápido" active={activeTab === 'Acesso Rápido'} onClick={() => setActiveTab('Acesso Rápido')} />
-          <SidebarItem icon={Calendar} label="Agenda" active={activeTab === 'Agenda'} onClick={() => setActiveTab('Agenda')} />
-          <SidebarItem icon={Activity} label="Visão Geral" active={activeTab === 'Visão Geral'} onClick={() => setActiveTab('Visão Geral')} />
-          <SidebarItem icon={Briefcase} label="Diagnóstico" active={activeTab === 'Diagnóstico'} onClick={() => setActiveTab('Diagnóstico')} />
-          <SidebarItem icon={Settings} label="Todos Serviços" active={activeTab === 'Todos Serviços'} onClick={() => setActiveTab('Todos Serviços')} />
+          <SidebarItem icon={Zap} label="Acesso Rápido" active={activeTab === 'Acesso Rápido'} onClick={() => handleTabChange('Acesso Rápido')} />
+          <SidebarItem icon={Calendar} label="Agenda" active={activeTab === 'Agenda'} onClick={() => handleTabChange('Agenda')} />
+          <SidebarItem icon={Activity} label="Visão Geral" active={activeTab === 'Visão Geral'} onClick={() => handleTabChange('Visão Geral')} />
+          <SidebarItem icon={Briefcase} label="Diagnóstico" active={activeTab === 'Diagnóstico'} onClick={() => handleTabChange('Diagnóstico')} />
+          <SidebarItem icon={Settings} label="Todos Serviços" active={activeTab === 'Todos Serviços'} onClick={() => handleTabChange('Todos Serviços')} />
           
           <SectionTitle>CRM</SectionTitle>
-          <SidebarItem icon={Users} label="Clientes" active={activeTab === 'Clientes'} onClick={() => setActiveTab('Clientes')} />
-          <SidebarItem icon={Calendar} label="Aniversariantes" active={activeTab === 'Aniversariantes'} onClick={() => setActiveTab('Aniversariantes')} />
+          <SidebarItem icon={Users} label="Clientes" active={activeTab === 'Clientes'} onClick={() => handleTabChange('Clientes')} />
+          <SidebarItem icon={Calendar} label="Aniversariantes" active={activeTab === 'Aniversariantes'} onClick={() => handleTabChange('Aniversariantes')} />
 
           <SectionTitle>Vendas & Atendimento</SectionTitle>
-          <SidebarItem icon={Lock} label={`Caixa Diário (${caixaStatus})`} active={activeTab === 'Caixa Diário'} onClick={() => setActiveTab('Caixa Diário')} />
-          <SidebarItem icon={FileText} label="Orçamentos" active={activeTab === 'Orçamentos'} onClick={() => setActiveTab('Orçamentos')} />
-          <SidebarItem icon={ClipboardList} label="Orçamentos (Kanban)" active={activeTab === 'Orçamentos (Kanban)'} onClick={() => setActiveTab('Orçamentos (Kanban)')} />
-          <SidebarItem icon={ClipboardList} label="Gerenciar Orçamentos" active={activeTab === 'Gerenciar Orçamentos'} onClick={() => setActiveTab('Gerenciar Orçamentos')} />
-          <SidebarItem icon={Users} label="Atendimentos" active={activeTab === 'Atendimentos'} onClick={() => setActiveTab('Atendimentos')} />
-          <SidebarItem icon={UserCheck} label="Cadastros" active={activeTab === 'Cadastros'} onClick={() => setActiveTab('Cadastros')} />
+          <SidebarItem icon={Lock} label={`Caixa Diário (${caixaStatus})`} active={activeTab === 'Caixa Diário'} onClick={() => handleTabChange('Caixa Diário')} />
+          <SidebarItem icon={FileText} label="Orçamentos" active={activeTab === 'Orçamentos'} onClick={() => handleTabChange('Orçamentos')} />
+          <SidebarItem icon={ClipboardList} label="Orçamentos (Kanban)" active={activeTab === 'Orçamentos (Kanban)'} onClick={() => handleTabChange('Orçamentos (Kanban)')} />
+          <SidebarItem icon={ClipboardList} label="Gerenciar Orçamentos" active={activeTab === 'Gerenciar Orçamentos'} onClick={() => handleTabChange('Gerenciar Orçamentos')} />
+          <SidebarItem icon={Users} label="Atendimentos" active={activeTab === 'Atendimentos'} onClick={() => handleTabChange('Atendimentos')} />
+          <SidebarItem icon={UserCheck} label="Cadastros" active={activeTab === 'Cadastros'} onClick={() => handleTabChange('Cadastros')} />
           
           <SectionTitle>Gestão</SectionTitle>
-          <SidebarItem icon={Package} label="Estoque" active={activeTab === 'Estoque'} onClick={() => setActiveTab('Estoque')} />
-          <SidebarItem icon={DollarSign} label="Financeiro" active={activeTab === 'Financeiro'} onClick={() => setActiveTab('Financeiro')} />
+          <SidebarItem icon={Package} label="Estoque" active={activeTab === 'Estoque'} onClick={() => handleTabChange('Estoque')} />
+          <SidebarItem icon={DollarSign} label="Financeiro" active={activeTab === 'Financeiro'} onClick={() => handleTabChange('Financeiro')} />
           
           <SectionTitle>Estratégia</SectionTitle>
-          <SidebarItem icon={Target} label="Crescimento" active={activeTab === 'Crescimento'} onClick={() => setActiveTab('Crescimento')} />
-          <SidebarItem icon={Megaphone} label="Marketing" active={activeTab === 'Marketing'} onClick={() => setActiveTab('Marketing')} />
-          <SidebarItem icon={Users} label="Análise de Clientes" active={activeTab === 'Análise de Clientes'} onClick={() => setActiveTab('Análise de Clientes')} />
-          <SidebarItem icon={BarChart3} label="Relatórios" active={activeTab === 'Relatórios'} onClick={() => setActiveTab('Relatórios')} />
+          <SidebarItem icon={Target} label="Crescimento" active={activeTab === 'Crescimento'} onClick={() => handleTabChange('Crescimento')} />
+          <SidebarItem icon={Megaphone} label="Marketing" active={activeTab === 'Marketing'} onClick={() => handleTabChange('Marketing')} />
+          <SidebarItem icon={Users} label="Análise de Clientes" active={activeTab === 'Análise de Clientes'} onClick={() => handleTabChange('Análise de Clientes')} />
+          <SidebarItem icon={BarChart3} label="Relatórios" active={activeTab === 'Relatórios'} onClick={() => handleTabChange('Relatórios')} />
         </div>
 
         <div className="p-4 border-t border-white/5">
@@ -438,6 +462,13 @@ const Dashboard = () => {
                 <div className="w-6 h-1 bg-current rounded-full"></div>
               </div>
             </button>
+            
+            {/* Logo for mobile/tablet when sidebar is closed */}
+            {!sidebarOpen && (
+              <div className="lg:hidden flex items-center">
+                <Logo size="small" />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-6">
@@ -477,21 +508,21 @@ const Dashboard = () => {
                   <div className="col-span-1 lg:col-span-4 bg-[#1a1d21] rounded-3xl p-8 border border-white/5">
                     <h3 className="text-xl font-bold mb-6">Ações Rápidas</h3>
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                      <QuickAction icon={PlusCircle} label="Novo Agendamento" onClick={() => setActiveTab('Agenda')} />
+                      <QuickAction icon={PlusCircle} label="Novo Agendamento" onClick={() => handleTabChange('Agenda')} />
                       <QuickAction 
                         icon={UserCheck} 
                         label="Novo Cliente" 
                         onClick={() => {
-                          setActiveTab('Cadastros');
+                          handleTabChange('Cadastros');
                           setCadastrosSubView('Cadastrar Clientes');
                         }} 
                       />
-                      <QuickAction icon={FileText} label="Novo Orçamento" onClick={() => setActiveTab('Orçamentos')} />
-                      <QuickAction icon={DollarSign} label="Lançar Despesa" onClick={() => setActiveTab('Financeiro')} />
+                      <QuickAction icon={FileText} label="Novo Orçamento" onClick={() => handleTabChange('Orçamentos')} />
+                      <QuickAction icon={DollarSign} label="Lançar Despesa" onClick={() => handleTabChange('Financeiro')} />
                       <QuickAction 
                         icon={caixaStatus === 'Aberto' ? Lock : PlusCircle} 
                         label={caixaStatus === 'Aberto' ? "Fechar Caixa" : "Abrir Caixa"} 
-                        onClick={() => setActiveTab('Caixa Diário')} 
+                        onClick={() => handleTabChange('Caixa Diário')} 
                         color={caixaStatus === 'Aberto' ? 'red' : 'green'}
                       />
                     </div>
@@ -578,7 +609,7 @@ const Dashboard = () => {
               )}
 
               {activeTab === 'Orçamentos' && (
-                <BudgetDashboard onCreateBudget={() => setActiveTab('Gerenciar Orçamentos')} />
+                <BudgetDashboard onCreateBudget={() => handleTabChange('Gerenciar Orçamentos')} />
               )}
 
               {activeTab === 'Orçamentos (Kanban)' && (
@@ -598,7 +629,7 @@ const Dashboard = () => {
                   <div className="p-6 border-b border-white/5 flex justify-between items-center">
                     <h3 className="text-xl font-bold">Meus Formulários</h3>
                     <button 
-                      onClick={() => setActiveTab('Criador de Formulários')}
+                      onClick={() => handleTabChange('Criador de Formulários')}
                       className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all"
                     >
                       Novo Formulário
@@ -609,7 +640,7 @@ const Dashboard = () => {
               )}
 
               {activeTab === 'Criador de Formulários' && (
-                <FormBuilder onSave={() => setActiveTab('Formulários')} />
+                <FormBuilder onSave={() => handleTabChange('Formulários')} />
               )}
 
               {activeTab === 'Cadastros' && (
@@ -665,7 +696,7 @@ const Dashboard = () => {
               )}
 
               {activeTab === 'Caixa Diário' && (
-                <CaixaDiario status={caixaStatus} setStatus={setCaixaStatus} setActiveTab={setActiveTab} />
+                <CaixaDiario status={caixaStatus} setStatus={setCaixaStatus} setActiveTab={handleTabChange} />
               )}
               {activeTab === 'Financeiro' && (
                 <FinanceiroView caixaStatus={caixaStatus} />
