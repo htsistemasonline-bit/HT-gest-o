@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import * as React from 'react';
+import { useState, useEffect, useRef, useCallback, Component } from 'react';
 import * as XLSX from 'xlsx';
 import CalendarComponent from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
@@ -20,6 +21,7 @@ import {
   Settings, 
   FileText, 
   PlusCircle, 
+  Folder,
   Share2,
   MessageSquare,
   ClipboardList,
@@ -68,36 +70,96 @@ import {
   Images,
   Share
 } from 'lucide-react';
-import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, useLocation } from 'react-router-dom';
-import { auth, db } from './firebase';
+import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
+import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, addDoc, query, where, onSnapshot, orderBy, limit, getDocs, deleteDoc, doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, addDoc, query, where, onSnapshot, orderBy, limit, getDocs, deleteDoc, doc, updateDoc, getDoc, setDoc, getDocFromServer } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 
 // --- Components ---
 
-const Logo = ({ size = "normal" }: { size?: "normal" | "small" }) => {
-  const [error, setError] = useState(false);
-  
-  if (error) {
-    return (
-      <div className="flex items-center gap-2">
-        <span className={`${size === 'normal' ? 'text-4xl' : 'text-2xl'} font-black text-[#00cc66] leading-none`}>HT</span>
-        <span className={`${size === 'normal' ? 'text-xl' : 'text-sm'} font-black tracking-tighter leading-none`}>Gestão Studio</span>
-      </div>
-    );
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  errorInfo: string;
+}
+
+class ErrorBoundary extends Component<any, any> {
+  constructor(props: any) {
+    super(props);
+    (this as any).state = { hasError: false, errorInfo: '' };
   }
 
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, errorInfo: error.message };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    const state = (this as any).state;
+    const props = (this as any).props;
+    if (state.hasError) {
+      let displayMessage = "Ocorreu um erro inesperado.";
+      try {
+        const parsed = JSON.parse(state.errorInfo);
+        if (parsed.error && parsed.error.includes('permission-denied')) {
+          displayMessage = "Você não tem permissão para acessar estes dados. Verifique se está logado corretamente.";
+        }
+      } catch (e) {
+        // Not a JSON error
+      }
+
+      return (
+        <div className="min-h-screen bg-[#0f1115] flex items-center justify-center p-4">
+          <div className="bg-[#1a1d21] p-8 rounded-3xl border border-white/10 max-w-md w-full text-center space-y-6">
+            <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mx-auto text-red-500">
+              <X size={40} />
+            </div>
+            <h2 className="text-2xl font-bold text-white">Ops! Algo deu errado</h2>
+            <p className="text-gray-400">{displayMessage}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition-all"
+            >
+              Recarregar Página
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return props.children;
+  }
+}
+
+const Logo = ({ size = "normal" }: { size?: "normal" | "small" }) => {
   return (
-    <img 
-      src="/logo.png" 
-      alt="Gestão Studio" 
-      className={`w-full h-auto object-contain ${size === 'normal' ? 'max-h-24' : 'max-h-10'}`}
-      referrerPolicy="no-referrer"
-      onError={() => setError(true)}
-    />
+    <div className="flex items-center gap-2">
+      <span className={`${size === 'normal' ? 'text-4xl' : 'text-2xl'} font-black text-[#00cc66] leading-none`}>HT</span>
+      <span className={`${size === 'normal' ? 'text-2xl' : 'text-lg'} font-black text-white tracking-tight leading-none`}>Estúdio de Gestão</span>
+    </div>
   );
 };
+
+const NotificationCard = ({ onClick }: { onClick?: () => void }) => (
+  <button 
+    onClick={onClick}
+    className="bg-[#252930] p-3 rounded-xl mb-4 flex items-start gap-3 border border-white/5 mx-1 text-left w-[calc(100%-8px)] hover:bg-white/5 transition-all"
+  >
+    <div className="bg-green-500/20 p-2 rounded-lg text-green-500 shrink-0">
+      <Bell size={20} />
+    </div>
+    <p className="text-sm font-medium text-white leading-tight">
+      Não se trata de uma questão de...
+    </p>
+  </button>
+);
 
 const SidebarItem = ({ icon: Icon, label, active, onClick, badge }: any) => (
   <button
@@ -312,9 +374,22 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
+    const testConnection = async () => {
+      try {
+        await getDocFromServer(doc(db, 'settings', 'connection_test'));
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration. The client is offline.");
+        }
+      }
+    };
+    testConnection();
+
     const q = query(collection(db, 'clients'), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (snapshot) => {
       setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'clients');
     });
   }, []);
 
@@ -322,6 +397,8 @@ const Dashboard = () => {
     const q = query(collection(db, 'budgets'), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (snapshot) => {
       setBudgets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'budgets');
     });
   }, []);
 
@@ -395,45 +472,23 @@ const Dashboard = () => {
 
         <div className="flex-1 overflow-y-auto px-3 pb-6 custom-scrollbar">
           <SectionTitle>Principal</SectionTitle>
-          <SidebarItem icon={Bell} label="Início" active={activeTab === 'Início'} onClick={() => handleTabChange('Início')} />
+          <NotificationCard onClick={() => handleTabChange('Início')} />
           
-          <SectionTitle>Formulários</SectionTitle>
-          <SidebarItem icon={ClipboardList} label="Formulários" active={activeTab === 'Formulários'} onClick={() => handleTabChange('Formulários')} />
-          <SidebarItem icon={LinkIcon} label="Formulários p/ Clientes" active={activeTab === 'Formulários p/ Clientes'} onClick={() => handleTabChange('Formulários p/ Clientes')} />
-          <SidebarItem icon={PlusCircle} label="Criador de Formulários" active={activeTab === 'Criador de Formulários'} onClick={() => handleTabChange('Criador de Formulários')} />
+          <SectionTitle>S</SectionTitle>
+          <SidebarItem icon={ClipboardList} label="s" active={activeTab === 's'} onClick={() => handleTabChange('s')} />
+          <SidebarItem icon={LinkIcon} label="Formulários para Clientes" active={activeTab === 'Formulários para Clientes'} onClick={() => handleTabChange('Formulários para Clientes')} />
+          <SidebarItem icon={PlusCircle} label="Criador de rolos" active={activeTab === 'Criador de rolos'} onClick={() => handleTabChange('Criador de rolos')} />
           
           <SectionTitle>Presença Online</SectionTitle>
           <SidebarItem icon={Camera} label="Meus trabalhos" active={activeTab === 'Meus trabalhos'} onClick={() => handleTabChange('Meus trabalhos')} />
-          <SidebarItem icon={BookOpen} label="Seu Catálogo" active={activeTab === 'Seu Catálogo'} onClick={() => handleTabChange('Seu Catálogo')} />
+          <SidebarItem icon={BookOpen} label="Seu" active={activeTab === 'Seu'} onClick={() => handleTabChange('Seu')} />
           
           <SectionTitle>Operacional</SectionTitle>
-          <SidebarItem icon={Zap} label="Acesso Rápido" active={activeTab === 'Acesso Rápido'} onClick={() => handleTabChange('Acesso Rápido')} />
+          <SidebarItem icon={Zap} label="Acesso Q" active={activeTab === 'Acesso Q'} onClick={() => handleTabChange('Acesso Q')} />
           <SidebarItem icon={Calendar} label="Agenda" active={activeTab === 'Agenda'} onClick={() => handleTabChange('Agenda')} />
           <SidebarItem icon={Activity} label="Visão Geral" active={activeTab === 'Visão Geral'} onClick={() => handleTabChange('Visão Geral')} />
           <SidebarItem icon={Briefcase} label="Diagnóstico" active={activeTab === 'Diagnóstico'} onClick={() => handleTabChange('Diagnóstico')} />
-          <SidebarItem icon={Settings} label="Todos Serviços" active={activeTab === 'Todos Serviços'} onClick={() => handleTabChange('Todos Serviços')} />
-          
-          <SectionTitle>CRM</SectionTitle>
-          <SidebarItem icon={Users} label="Clientes" active={activeTab === 'Clientes'} onClick={() => handleTabChange('Clientes')} />
-          <SidebarItem icon={Calendar} label="Aniversariantes" active={activeTab === 'Aniversariantes'} onClick={() => handleTabChange('Aniversariantes')} />
-
-          <SectionTitle>Vendas & Atendimento</SectionTitle>
-          <SidebarItem icon={Lock} label={`Caixa Diário (${caixaStatus})`} active={activeTab === 'Caixa Diário'} onClick={() => handleTabChange('Caixa Diário')} />
-          <SidebarItem icon={FileText} label="Orçamentos" active={activeTab === 'Orçamentos'} onClick={() => handleTabChange('Orçamentos')} />
-          <SidebarItem icon={ClipboardList} label="Orçamentos (Kanban)" active={activeTab === 'Orçamentos (Kanban)'} onClick={() => handleTabChange('Orçamentos (Kanban)')} />
-          <SidebarItem icon={ClipboardList} label="Gerenciar Orçamentos" active={activeTab === 'Gerenciar Orçamentos'} onClick={() => handleTabChange('Gerenciar Orçamentos')} />
-          <SidebarItem icon={Users} label="Atendimentos" active={activeTab === 'Atendimentos'} onClick={() => handleTabChange('Atendimentos')} />
-          <SidebarItem icon={UserCheck} label="Cadastros" active={activeTab === 'Cadastros'} onClick={() => handleTabChange('Cadastros')} />
-          
-          <SectionTitle>Gestão</SectionTitle>
-          <SidebarItem icon={Package} label="Estoque" active={activeTab === 'Estoque'} onClick={() => handleTabChange('Estoque')} />
-          <SidebarItem icon={DollarSign} label="Financeiro" active={activeTab === 'Financeiro'} onClick={() => handleTabChange('Financeiro')} />
-          
-          <SectionTitle>Estratégia</SectionTitle>
-          <SidebarItem icon={Target} label="Crescimento" active={activeTab === 'Crescimento'} onClick={() => handleTabChange('Crescimento')} />
-          <SidebarItem icon={Megaphone} label="Marketing" active={activeTab === 'Marketing'} onClick={() => handleTabChange('Marketing')} />
-          <SidebarItem icon={Users} label="Análise de Clientes" active={activeTab === 'Análise de Clientes'} onClick={() => handleTabChange('Análise de Clientes')} />
-          <SidebarItem icon={BarChart3} label="Relatórios" active={activeTab === 'Relatórios'} onClick={() => handleTabChange('Relatórios')} />
+          <SidebarItem icon={Settings} label="Todos os serviços" active={activeTab === 'Todos os serviços'} onClick={() => handleTabChange('Todos os serviços')} />
         </div>
 
         <div className="p-4 border-t border-white/5">
@@ -620,16 +675,16 @@ const Dashboard = () => {
                 <BudgetManager />
               )}
 
-              {activeTab === 'Formulários p/ Clientes' && (
+              {activeTab === 'Formulários para Clientes' && (
                 <ClientForms />
               )}
 
-              {activeTab === 'Formulários' && (
+              {activeTab === 's' && (
                 <div className="bg-[#1a1d21] rounded-3xl border border-white/5 overflow-hidden">
                   <div className="p-6 border-b border-white/5 flex justify-between items-center">
                     <h3 className="text-xl font-bold">Meus Formulários</h3>
                     <button 
-                      onClick={() => handleTabChange('Criador de Formulários')}
+                      onClick={() => handleTabChange('Criador de rolos')}
                       className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all"
                     >
                       Novo Formulário
@@ -639,8 +694,8 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {activeTab === 'Criador de Formulários' && (
-                <FormBuilder onSave={() => handleTabChange('Formulários')} />
+              {activeTab === 'Criador de rolos' && (
+                <FormBuilder onSave={() => handleTabChange('s')} />
               )}
 
               {activeTab === 'Cadastros' && (
@@ -710,7 +765,7 @@ const Dashboard = () => {
               {activeTab === 'Meus trabalhos' && (
                 <MeusTrabalhosView />
               )}
-              {activeTab !== 'Início' && activeTab !== 'Cadastros' && activeTab !== 'Formulários' && activeTab !== 'Criador de Formulários' && activeTab !== 'Clientes' && activeTab !== 'Aniversariantes' && activeTab !== 'Caixa Diário' && activeTab !== 'Atendimentos' && activeTab !== 'Meus trabalhos' && (
+              {activeTab !== 'Início' && activeTab !== 'Cadastros' && activeTab !== 's' && activeTab !== 'Criador de rolos' && activeTab !== 'Clientes' && activeTab !== 'Aniversariantes' && activeTab !== 'Caixa Diário' && activeTab !== 'Atendimentos' && activeTab !== 'Meus trabalhos' && (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                   <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mb-6">
                     <Settings size={40} className="text-gray-600" />
@@ -729,69 +784,193 @@ const Dashboard = () => {
 
 const MeusTrabalhosView = () => {
   const [works, setWorks] = useState<any[]>([]);
+  const [folders, setFolders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newWork, setNewWork] = useState({ title: '', url: '', category: 'Tattoo' });
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [editingFolder, setEditingFolder] = useState<any>(null);
+  const [editingWork, setEditingWork] = useState<any>(null);
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+  const [newWork, setNewWork] = useState({ title: '', urls: [] as string[], folderId: '' });
+  const [isUploading, setIsUploading] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'portfolio'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const worksData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setWorks(worksData);
-      setLoading(false);
+    // Listen to folders
+    const foldersQ = query(collection(db, 'folders'), orderBy('createdAt', 'desc'));
+    const unsubscribeFolders = onSnapshot(foldersQ, (snapshot) => {
+      setFolders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'folders');
     });
-    return () => unsubscribe();
+
+    // Listen to works
+    const worksQ = query(collection(db, 'portfolio'), orderBy('createdAt', 'desc'));
+    const unsubscribeWorks = onSnapshot(worksQ, (snapshot) => {
+      setWorks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'portfolio');
+    });
+
+    return () => {
+      unsubscribeFolders();
+      unsubscribeWorks();
+    };
   }, []);
 
   const handleAddWork = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (newWork.urls.length === 0) return;
+    setIsUploading(true);
     try {
-      await addDoc(collection(db, 'portfolio'), {
-        ...newWork,
-        createdAt: new Date().toISOString()
-      });
+      if (editingWork) {
+        await updateDoc(doc(db, 'portfolio', editingWork.id), {
+          title: newWork.title,
+          url: newWork.urls[0],
+          folderId: newWork.folderId || currentFolderId || ''
+        });
+      } else {
+        // Multi-upload
+        const uploadPromises = newWork.urls.map(url => 
+          addDoc(collection(db, 'portfolio'), {
+            title: newWork.title,
+            url: url,
+            folderId: currentFolderId || '',
+            createdAt: new Date().toISOString()
+          })
+        );
+        await Promise.all(uploadPromises);
+      }
       setShowAddModal(false);
-      setNewWork({ title: '', url: '', category: 'Tattoo' });
+      setNewWork({ title: '', urls: [], folderId: '' });
+      setEditingWork(null);
     } catch (error) {
-      console.error("Error adding work:", error);
+      console.error("Error adding/updating work:", error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      const fileArray = Array.from(files);
+      const readers = fileArray.map((file: File) => {
+        return new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(file as Blob);
+        });
+      });
+
+      Promise.all(readers).then(results => {
+        setNewWork(prev => ({ ...prev, urls: [...prev.urls, ...results] }));
+      });
     }
   };
 
   const handleDeleteWork = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir este trabalho?")) return;
     try {
       await deleteDoc(doc(db, 'portfolio', id));
+      if (selectedImageIndex !== null) {
+        setSelectedImageIndex(null);
+      }
     } catch (error) {
       console.error("Error deleting work:", error);
     }
   };
 
-  const copyPortfolioLink = () => {
-    const link = `${window.location.origin}/portfolio`;
-    navigator.clipboard.writeText(link);
-    alert("Link do portfólio copiado para a área de transferência!");
+  const handleCreateFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFolderName.trim()) return;
+    try {
+      if (editingFolder) {
+        await updateDoc(doc(db, 'folders', editingFolder.id), {
+          name: newFolderName
+        });
+      } else {
+        await addDoc(collection(db, 'folders'), {
+          name: newFolderName,
+          createdAt: new Date().toISOString()
+        });
+      }
+      setShowFolderModal(false);
+      setNewFolderName('');
+      setEditingFolder(null);
+    } catch (error) {
+      console.error("Error with folder:", error);
+    }
   };
+
+  const handleDeleteFolder = async (folderId: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta pasta? Todos os trabalhos nela serão movidos para a raiz.")) return;
+    try {
+      // Move works to root
+      const folderWorks = works.filter(w => w.folderId === folderId);
+      for (const work of folderWorks) {
+        await updateDoc(doc(db, 'portfolio', work.id), { folderId: '' });
+      }
+      await deleteDoc(doc(db, 'folders', folderId));
+      if (currentFolderId === folderId) setCurrentFolderId(null);
+    } catch (error) {
+      console.error("Error deleting folder:", error);
+    }
+  };
+
+  const filteredWorks = works.filter(w => w.folderId === (currentFolderId || ''));
+  const currentFolder = folders.find(f => f.id === currentFolderId);
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#1a1d21] p-6 rounded-3xl border border-white/5">
         <div>
           <h3 className="text-2xl font-bold text-white flex items-center gap-2">
             <Camera className="text-orange-500" />
-            Meu Portfólio de Trabalhos
+            {currentFolder ? `Pasta: ${currentFolder.name}` : 'Meu Portfólio'}
           </h3>
-          <p className="text-gray-500 text-sm">Gerencie as fotos que seus clientes verão no seu link público.</p>
+          <p className="text-gray-500 text-sm">Organize seus trabalhos em pastas e gerencie sua galeria.</p>
         </div>
         <div className="flex gap-3 w-full md:w-auto">
+          {currentFolderId && (
+            <button 
+              onClick={() => setCurrentFolderId(null)}
+              className="bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2"
+            >
+              <ChevronRight className="rotate-180" size={18} />
+              Voltar
+            </button>
+          )}
           <button 
-            onClick={copyPortfolioLink}
-            className="flex-1 md:flex-none bg-white/5 hover:bg-white/10 text-white px-6 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+            onClick={() => {
+              const link = window.location.origin + '/portfolio';
+              navigator.clipboard.writeText(link).then(() => {
+                alert('Link do portfólio copiado com sucesso!\n\n' + link);
+              });
+            }}
+            className="bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 border border-white/5"
           >
-            <Share size={20} />
-            Gerar Link para Clientes
+            <Share2 size={18} />
+            Compartilhar
+          </button>
+          <button 
+            onClick={() => {
+              setEditingFolder(null);
+              setNewFolderName('');
+              setShowFolderModal(true);
+            }}
+            className="bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2"
+          >
+            <PlusCircle size={18} />
+            Nova Pasta
           </button>
           <button 
             onClick={() => setShowAddModal(true)}
-            className="flex-1 md:flex-none bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20"
+            className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2 shadow-lg shadow-orange-500/20"
           >
             <Plus size={20} />
             Adicionar Trabalho
@@ -803,111 +982,332 @@ const MeusTrabalhosView = () => {
         <div className="flex justify-center py-20">
           <RefreshCw className="animate-spin text-orange-500" size={40} />
         </div>
-      ) : works.length === 0 ? (
-        <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-20 text-center">
-          <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mx-auto mb-6">
-            <Images size={40} className="text-gray-600" />
-          </div>
-          <h3 className="text-xl font-bold text-white mb-2">Nenhum trabalho cadastrado</h3>
-          <p className="text-gray-500 max-w-sm mx-auto mb-8">Comece adicionando suas melhores tatuagens para criar um portfólio incrível para seus clientes.</p>
-          <button 
-            onClick={() => setShowAddModal(true)}
-            className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-xl font-bold transition-all"
-          >
-            Adicionar Primeiro Trabalho
-          </button>
-        </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {works.map((work) => (
-            <motion.div 
-              key={work.id}
-              layout
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="group relative aspect-square bg-[#1a1d21] rounded-3xl overflow-hidden border border-white/5"
-            >
-              <img 
-                src={work.url} 
-                alt={work.title} 
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-4 text-center">
-                <h4 className="text-white font-bold mb-1">{work.title}</h4>
-                <span className="text-orange-500 text-xs font-bold uppercase tracking-wider mb-4">{work.category}</span>
-                <button 
-                  onClick={() => handleDeleteWork(work.id)}
-                  className="bg-red-500/20 hover:bg-red-500 text-red-500 hover:text-white p-3 rounded-xl transition-all"
+        <div className="space-y-8">
+          {/* Folders Grid (Only show on root or if there are folders) */}
+          {!currentFolderId && folders.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+              {folders.map(folder => (
+                <div 
+                  key={folder.id}
+                  className="group relative bg-[#1a1d21] p-4 rounded-2xl border border-white/5 hover:border-orange-500/50 transition-all cursor-pointer"
+                  onClick={() => setCurrentFolderId(folder.id)}
                 >
-                  <Trash2 size={20} />
-                </button>
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-12 h-12 bg-orange-500/10 rounded-xl flex items-center justify-center text-orange-500">
+                      <Folder size={24} />
+                    </div>
+                    <span className="text-sm font-bold text-white text-center truncate w-full">{folder.name}</span>
+                  </div>
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentFolderId(folder.id);
+                        setShowAddModal(true);
+                      }}
+                      title="Adicionar imagens nesta pasta"
+                      className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500 rounded-lg text-emerald-500 hover:text-white"
+                    >
+                      <Plus size={14} />
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingFolder(folder);
+                        setNewFolderName(folder.name);
+                        setShowFolderModal(true);
+                      }}
+                      className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-gray-400 hover:text-white"
+                    >
+                      <Settings size={14} />
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteFolder(folder.id);
+                      }}
+                      className="p-1.5 bg-red-500/10 hover:bg-red-500 rounded-lg text-red-500 hover:text-white"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Works Grid */}
+          {filteredWorks.length === 0 ? (
+            <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-20 text-center">
+              <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                <Images size={40} className="text-gray-600" />
               </div>
-            </motion.div>
-          ))}
+              <h3 className="text-xl font-bold text-white mb-2">Nenhum trabalho nesta pasta</h3>
+              <p className="text-gray-500 max-w-sm mx-auto mb-8">Comece adicionando suas melhores fotos para este álbum.</p>
+              <button 
+                onClick={() => setShowAddModal(true)}
+                className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-xl font-bold transition-all"
+              >
+                Adicionar Trabalho
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {filteredWorks.map((work, index) => (
+                <motion.div 
+                  key={work.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="group relative aspect-square bg-[#1a1d21] rounded-2xl overflow-hidden border border-white/5 cursor-pointer"
+                  onClick={() => setSelectedImageIndex(index)}
+                >
+                  <img 
+                    src={work.url} 
+                    alt={work.title} 
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    referrerPolicy="no-referrer"
+                  />
+                  
+                  {/* Folder Name (Top Left) */}
+                  <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-[10px] font-bold text-white uppercase tracking-wider">
+                      {folders.find(f => f.id === work.folderId)?.name || 'Raiz'}
+                    </span>
+                  </div>
+
+                  {/* Actions (Bottom Right) */}
+                  <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingWork(work);
+                        setNewWork({ title: work.title, urls: [work.url], folderId: work.folderId });
+                        setShowAddModal(true);
+                      }}
+                      className="p-2 bg-white/10 hover:bg-white backdrop-blur-md rounded-lg text-white hover:text-black transition-all"
+                    >
+                      <Settings size={16} />
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteWork(work.id);
+                      }}
+                      className="p-2 bg-red-500/20 hover:bg-red-500 backdrop-blur-md rounded-lg text-red-500 hover:text-white transition-all"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
+      {/* Add Work Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <motion.div 
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-[#1a1d21] w-full max-w-md rounded-3xl border border-white/10 overflow-hidden"
+            className="bg-[#1a1d21] w-full max-w-md rounded-3xl border border-white/10 p-8 shadow-2xl"
           >
-            <div className="p-6 border-b border-white/5 flex justify-between items-center">
-              <h3 className="text-xl font-bold text-white">Novo Trabalho</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-gray-500 hover:text-white">
-                <X size={24} />
-              </button>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold text-white">{editingWork ? 'Editar Trabalho' : 'Novo Trabalho'}</h3>
+              <button onClick={() => {
+                setShowAddModal(false);
+                setEditingWork(null);
+                setNewWork({ title: '', urls: [], folderId: '' });
+              }} className="text-gray-500 hover:text-white"><X size={24} /></button>
             </div>
-            <form onSubmit={handleAddWork} className="p-6 space-y-4">
+            <form onSubmit={handleAddWork} className="space-y-6">
               <div>
-                <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">Título do Trabalho</label>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Título do Trabalho</label>
                 <input 
-                  required
-                  type="text" 
-                  className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
-                  placeholder="Ex: Realismo no Braço"
+                  type="text"
                   value={newWork.title}
-                  onChange={e => setNewWork({...newWork, title: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">URL da Imagem</label>
-                <input 
-                  required
-                  type="url" 
+                  onChange={(e) => setNewWork({...newWork, title: e.target.value})}
                   className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
-                  placeholder="https://exemplo.com/foto.jpg"
-                  value={newWork.url}
-                  onChange={e => setNewWork({...newWork, url: e.target.value})}
+                  placeholder="Ex: Tatuagem Realismo Braço"
                 />
-                <p className="text-[10px] text-gray-500 mt-1">Dica: Use links do Google Drive, Dropbox ou sites de hospedagem de imagens.</p>
               </div>
+              
               <div>
-                <label className="block text-xs font-bold text-orange-500 uppercase mb-1.5">Categoria</label>
-                <select 
-                  className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all appearance-none"
-                  value={newWork.category}
-                  onChange={e => setNewWork({...newWork, category: e.target.value})}
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Fotos do Trabalho</label>
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full min-h-[160px] bg-[#0f1115] border-2 border-dashed border-white/5 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-orange-500/50 transition-all overflow-hidden p-4"
                 >
-                  <option>Tattoo</option>
-                  <option>Piercing</option>
-                  <option>Desenho</option>
-                  <option>Outros</option>
-                </select>
+                  {newWork.urls.length > 0 ? (
+                    <div className="grid grid-cols-3 gap-2 w-full">
+                      {newWork.urls.map((url, i) => (
+                        <div key={i} className="relative aspect-square rounded-lg overflow-hidden group/img">
+                          <img src={url} alt="Preview" className="w-full h-full object-cover" />
+                          <button 
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setNewWork(prev => ({ ...prev, urls: prev.urls.filter((_, idx) => idx !== i) }));
+                            }}
+                            className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-md opacity-0 group-hover/img:opacity-100 transition-opacity"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                      <div className="aspect-square bg-white/5 rounded-lg flex items-center justify-center border border-dashed border-white/10">
+                        <Plus size={20} className="text-gray-600" />
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Plus size={32} className="text-gray-600 mb-2" />
+                      <span className="text-gray-500 text-sm">Clique para selecionar fotos</span>
+                      <span className="text-gray-600 text-xs mt-1">(Você pode selecionar várias)</span>
+                    </>
+                  )}
+                </div>
+                <input 
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                />
               </div>
+
               <button 
                 type="submit"
-                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-orange-500/20 mt-4"
+                disabled={newWork.urls.length === 0 || isUploading}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-orange-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                Salvar no Portfólio
+                {isUploading ? (
+                  <>
+                    <RefreshCw className="animate-spin" size={20} />
+                    Salvando...
+                  </>
+                ) : (
+                  'Salvar Trabalho'
+                )}
               </button>
             </form>
           </motion.div>
         </div>
       )}
+
+      {/* Folder Modal */}
+      {showFolderModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-[#1a1d21] w-full max-w-md rounded-3xl border border-white/10 p-8 shadow-2xl"
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold text-white">{editingFolder ? 'Renomear Pasta' : 'Nova Pasta'}</h3>
+              <button onClick={() => setShowFolderModal(false)} className="text-gray-500 hover:text-white"><X size={24} /></button>
+            </div>
+            <form onSubmit={handleCreateFolder} className="space-y-6">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Nome da Pasta</label>
+                <input 
+                  type="text"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
+                  placeholder="Ex: Tatuagens Realistas"
+                  autoFocus
+                />
+              </div>
+              
+              <button 
+                type="submit"
+                disabled={!newFolderName.trim()}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-orange-500/20 disabled:opacity-50"
+              >
+                {editingFolder ? 'Salvar Alteração' : 'Criar Pasta'}
+              </button>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Lightbox Modal */}
+      <AnimatePresence>
+        {selectedImageIndex !== null && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4 md:p-12"
+            onClick={() => setSelectedImageIndex(null)}
+          >
+            <button 
+              className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors z-10 flex items-center gap-4"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedImageIndex(null);
+              }}
+            >
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteWork(filteredWorks[selectedImageIndex!].id);
+                }}
+                className="p-2 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl transition-all"
+                title="Excluir imagem"
+              >
+                <Trash2 size={24} />
+              </button>
+              <X size={32} />
+            </button>
+
+            {/* Navigation Buttons */}
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-4 md:px-10 pointer-events-none">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedImageIndex(prev => prev !== null ? (prev > 0 ? prev - 1 : filteredWorks.length - 1) : null);
+                }}
+                className="w-12 h-12 bg-white/5 hover:bg-white/10 text-white rounded-full flex items-center justify-center backdrop-blur-md border border-white/10 transition-all pointer-events-auto"
+              >
+                <ChevronRight className="rotate-180" size={24} />
+              </button>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedImageIndex(prev => prev !== null ? (prev < filteredWorks.length - 1 ? prev + 1 : 0) : null);
+                }}
+                className="w-12 h-12 bg-white/5 hover:bg-white/10 text-white rounded-full flex items-center justify-center backdrop-blur-md border border-white/10 transition-all pointer-events-auto"
+              >
+                <ChevronRight size={24} />
+              </button>
+            </div>
+
+            <div className="relative max-w-full max-h-full flex flex-col items-center gap-4">
+              <motion.img 
+                key={selectedImageIndex}
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                src={filteredWorks[selectedImageIndex].url} 
+                className="max-w-full max-h-[80vh] rounded-2xl shadow-2xl object-contain"
+                onClick={(e) => e.stopPropagation()}
+              />
+              <div className="text-center">
+                <h4 className="text-white font-bold text-lg">{filteredWorks[selectedImageIndex].title || 'Sem título'}</h4>
+                <p className="text-gray-500 text-sm">
+                  {selectedImageIndex + 1} de {filteredWorks.length}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -925,6 +1325,8 @@ const FinanceiroView = ({ caixaStatus }: { caixaStatus: 'Aberto' | 'Fechado' }) 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setTransactions(data);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'transactions');
     });
     return () => unsubscribe();
   }, []);
@@ -934,6 +1336,8 @@ const FinanceiroView = ({ caixaStatus }: { caixaStatus: 'Aberto' | 'Fechado' }) 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setInventoryItems(data);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'inventory');
     });
     return () => unsubscribe();
   }, []);
@@ -1240,6 +1644,8 @@ const InventoryView = () => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setItems(data);
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'inventory');
     });
     return () => unsubscribe();
   }, []);
@@ -1813,6 +2219,8 @@ const ClientHistory = ({ onBack }: { onBack: () => void }) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setHistory(data);
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'budgets');
     });
     return () => unsubscribe();
   }, []);
@@ -2039,6 +2447,8 @@ const BirthdayManager = () => {
 
       setBirthdayClients(filtered);
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'clients');
     });
   }, []);
 
@@ -2143,6 +2553,8 @@ const FormsList = () => {
     const q = query(collection(db, 'forms'), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (snapshot) => {
       setForms(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'forms');
     });
   }, []);
 
@@ -2256,7 +2668,7 @@ const FormBuilder = ({ onSave }: { onSave: () => void }) => {
     <div className="space-y-8">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-2xl font-bold text-white">Criador de Formulários</h3>
+          <h3 className="text-2xl font-bold text-white">Criador de rolos</h3>
           <p className="text-gray-500">Crie formulários personalizados para seus clientes.</p>
         </div>
         <div className="flex gap-4">
@@ -2408,6 +2820,8 @@ const ClientDetailsModal = ({ client, onClose }: { client: any, onClose: () => v
     );
     return onSnapshot(q, (snapshot) => {
       setFollowUps(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'followups');
     });
   }, [client]);
 
@@ -2589,6 +3003,8 @@ const NewBudgetModal = ({ onClose }: { onClose: () => void }) => {
     const q = query(collection(db, 'clients'));
     return onSnapshot(q, (snapshot) => {
       setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'clients');
     });
   }, []);
 
@@ -3120,6 +3536,8 @@ const BudgetDashboard = ({ onCreateBudget }: { onCreateBudget: () => void }) => 
     return onSnapshot(q, (snapshot) => {
       setBudgets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'budgets');
     });
   }, []);
 
@@ -3218,6 +3636,8 @@ const BudgetManager = () => {
     return onSnapshot(q, (snapshot) => {
       setBudgets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'budgets');
     });
   }, []);
 
@@ -3421,7 +3841,7 @@ const ClientForms = () => {
       {/* ... existing header ... */}
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-2xl font-bold text-white">Formulários p/ Clientes</h3>
+          <h3 className="text-2xl font-bold text-white">Formulários para Clientes</h3>
           <p className="text-gray-500">Disponibilize links para seus clientes solicitarem orçamentos e agendamentos.</p>
         </div>
         <button 
@@ -3767,6 +4187,8 @@ const PublicTracking = () => {
         setBudget({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
       }
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'budgets');
     });
   }, [token]);
 
@@ -3858,22 +4280,28 @@ const PublicTracking = () => {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/budget-request/:slug" element={<PublicBudgetRequest />} />
-        <Route path="/track/:token" element={<PublicTracking />} />
-        <Route path="/cadastro" element={<RegistrationForm />} />
-        <Route path="/portal" element={<ClientPortal />} />
-        <Route path="/portfolio" element={<PublicPortfolio />} />
-        <Route path="/*" element={<Dashboard />} />
-      </Routes>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/budget-request/:slug" element={<PublicBudgetRequest />} />
+          <Route path="/track/:token" element={<PublicTracking />} />
+          <Route path="/cadastro" element={<RegistrationForm />} />
+          <Route path="/portal" element={<ClientPortal />} />
+          <Route path="/portfolio" element={<PublicPortfolio />} />
+          <Route path="/*" element={<Dashboard />} />
+        </Routes>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 
 const PublicPortfolio = () => {
   const [works, setWorks] = useState<any[]>([]);
+  const [folders, setFolders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchParams] = useSearchParams();
+  const currentFolderId = searchParams.get('folder');
+  const navigate = useNavigate();
 
   useEffect(() => {
     const q = query(collection(db, 'portfolio'), orderBy('createdAt', 'desc'));
@@ -3881,9 +4309,28 @@ const PublicPortfolio = () => {
       const worksData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setWorks(worksData);
       setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'portfolio');
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, 'folders'), orderBy('name', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const foldersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setFolders(foldersData);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'folders');
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const filteredWorks = works.filter(work => {
+    if (!currentFolderId) return !work.folderId || work.folderId === '';
+    return work.folderId === currentFolderId;
+  });
+  const currentFolderName = folders.find(f => f.id === currentFolderId)?.name;
 
   return (
     <div className="min-h-screen bg-[#0f1115] text-white p-4 md:p-8">
@@ -3891,8 +4338,20 @@ const PublicPortfolio = () => {
         <div className="w-20 h-20 bg-orange-500/10 rounded-3xl flex items-center justify-center mx-auto mb-6">
           <Camera size={40} className="text-orange-500" />
         </div>
-        <h1 className="text-4xl font-black uppercase tracking-tighter mb-2">Meu Portfólio</h1>
+        <h1 className="text-4xl font-black uppercase tracking-tighter mb-2">
+          {currentFolderName || 'Meu Portfólio'}
+        </h1>
         <p className="text-gray-500">Conheça alguns dos meus melhores trabalhos</p>
+        
+        {currentFolderId && (
+          <button 
+            onClick={() => navigate('/portfolio')}
+            className="mt-6 bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 mx-auto"
+          >
+            <ChevronRight className="rotate-180" size={18} />
+            Voltar ao Início
+          </button>
+        )}
       </header>
 
       <main className="max-w-7xl mx-auto">
@@ -3900,31 +4359,53 @@ const PublicPortfolio = () => {
           <div className="flex justify-center py-20">
             <RefreshCw className="animate-spin text-orange-500" size={40} />
           </div>
-        ) : works.length === 0 ? (
-          <div className="text-center py-20 bg-[#1a1d21] rounded-3xl border border-white/5">
-            <p className="text-gray-500">Nenhum trabalho disponível no momento.</p>
-          </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {works.map((work) => (
-              <motion.div 
-                key={work.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="group relative aspect-square bg-[#1a1d21] rounded-3xl overflow-hidden border border-white/5"
-              >
-                <img 
-                  src={work.url} 
-                  alt={work.title} 
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-black/80 to-transparent pt-12">
-                  <h4 className="text-white font-bold">{work.title}</h4>
-                  <span className="text-orange-500 text-xs font-bold uppercase tracking-wider">{work.category}</span>
-                </div>
-              </motion.div>
-            ))}
+          <div className="space-y-12">
+            {/* Folders Grid (Only show on root) */}
+            {!currentFolderId && folders.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                {folders.map(folder => (
+                  <div 
+                    key={folder.id}
+                    className="group bg-[#1a1d21] p-6 rounded-2xl border border-white/5 hover:border-orange-500/50 transition-all cursor-pointer text-center"
+                    onClick={() => navigate(`/portfolio?folder=${folder.id}`)}
+                  >
+                    <div className="w-12 h-12 bg-orange-500/10 rounded-xl flex items-center justify-center text-orange-500 mx-auto mb-3">
+                      <PlusCircle size={24} />
+                    </div>
+                    <span className="text-sm font-bold text-white truncate w-full block">{folder.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Works Grid */}
+            {filteredWorks.length === 0 ? (
+              <div className="text-center py-20 bg-[#1a1d21] rounded-3xl border border-white/5">
+                <p className="text-gray-500">Nenhum trabalho disponível nesta categoria.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {filteredWorks.map((work) => (
+                  <motion.div 
+                    key={work.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="group relative aspect-square bg-[#1a1d21] rounded-3xl overflow-hidden border border-white/5"
+                  >
+                    <img 
+                      src={work.url} 
+                      alt={work.title} 
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-black/80 to-transparent pt-12">
+                      <h4 className="text-white font-bold">{work.title}</h4>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </main>

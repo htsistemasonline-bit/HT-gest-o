@@ -63,6 +63,35 @@
         "description": { "type": "string" },
         "category": { "type": "string" }
       }
+    },
+    "portfolio": {
+      "title": "Portfólio",
+      "description": "Trabalhos realizados pelo artista",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "url": { "type": "string" },
+        "folderId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "folders": {
+      "title": "Pastas",
+      "description": "Pastas para organizar o portfólio",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "settings": {
+      "title": "Configurações",
+      "description": "Configurações globais do sistema",
+      "type": "object",
+      "properties": {
+        "monthly": { "type": "number" },
+        "annual": { "type": "number" }
+      }
     }
   },
   "firestore": {
@@ -70,6 +99,9 @@
     "/appointments": { "schema": "appointments", "description": "Coleção de agendamentos" },
     "/budgets": { "schema": "budgets", "description": "Coleção de orçamentos" },
     "/inventory": { "schema": "inventory", "description": "Coleção de estoque" },
-    "/transactions": { "schema": "transactions", "description": "Coleção de transações financeiras" }
+    "/transactions": { "schema": "transactions", "description": "Coleção de transações financeiras" },
+    "/portfolio": { "schema": "portfolio", "description": "Coleção de trabalhos" },
+    "/folders": { "schema": "folders", "description": "Coleção de pastas" },
+    "/settings": { "schema": "settings", "description": "Coleção de configurações" }
   }
 }

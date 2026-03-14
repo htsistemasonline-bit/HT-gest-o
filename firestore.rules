@@ -69,8 +69,15 @@ service cloud.firestore {
     }
 
     match /portfolio/{workId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if true;
+    }
+
+    match /folders/{folderId} {
+      allow read, write: if true;
+    }
+
+    match /settings/{settingId} {
+      allow read, write: if true;
     }
 
     // Default deny
