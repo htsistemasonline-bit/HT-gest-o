@@ -139,27 +139,27 @@ class ErrorBoundary extends Component<any, any> {
 }
 
 const Logo = ({ size = "normal" }: { size?: "normal" | "small" }) => {
+  const [error, setError] = useState(false);
+  
+  if (error) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className={`${size === 'normal' ? 'text-4xl' : 'text-2xl'} font-black text-[#00cc66] leading-none`}>HT</span>
+        <span className={`${size === 'normal' ? 'text-xl' : 'text-sm'} font-black tracking-tighter leading-none`}>Gestão Studio</span>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-2">
-      <span className={`${size === 'normal' ? 'text-4xl' : 'text-2xl'} font-black text-[#00cc66] leading-none`}>HT</span>
-      <span className={`${size === 'normal' ? 'text-2xl' : 'text-lg'} font-black text-white tracking-tight leading-none`}>Estúdio de Gestão</span>
-    </div>
+    <img 
+      src="/logo.png" 
+      alt="Gestão Studio" 
+      className={`w-full h-auto object-contain ${size === 'normal' ? 'max-h-24' : 'max-h-10'}`}
+      referrerPolicy="no-referrer"
+      onError={() => setError(true)}
+    />
   );
 };
-
-const NotificationCard = ({ onClick }: { onClick?: () => void }) => (
-  <button 
-    onClick={onClick}
-    className="bg-[#252930] p-3 rounded-xl mb-4 flex items-start gap-3 border border-white/5 mx-1 text-left w-[calc(100%-8px)] hover:bg-white/5 transition-all"
-  >
-    <div className="bg-green-500/20 p-2 rounded-lg text-green-500 shrink-0">
-      <Bell size={20} />
-    </div>
-    <p className="text-sm font-medium text-white leading-tight">
-      Não se trata de uma questão de...
-    </p>
-  </button>
-);
 
 const SidebarItem = ({ icon: Icon, label, active, onClick, badge }: any) => (
   <button
@@ -472,23 +472,45 @@ const Dashboard = () => {
 
         <div className="flex-1 overflow-y-auto px-3 pb-6 custom-scrollbar">
           <SectionTitle>Principal</SectionTitle>
-          <NotificationCard onClick={() => handleTabChange('Início')} />
+          <SidebarItem icon={Bell} label="Início" active={activeTab === 'Início'} onClick={() => handleTabChange('Início')} />
           
-          <SectionTitle>S</SectionTitle>
-          <SidebarItem icon={ClipboardList} label="s" active={activeTab === 's'} onClick={() => handleTabChange('s')} />
-          <SidebarItem icon={LinkIcon} label="Formulários para Clientes" active={activeTab === 'Formulários para Clientes'} onClick={() => handleTabChange('Formulários para Clientes')} />
-          <SidebarItem icon={PlusCircle} label="Criador de rolos" active={activeTab === 'Criador de rolos'} onClick={() => handleTabChange('Criador de rolos')} />
+          <SectionTitle>Formulários</SectionTitle>
+          <SidebarItem icon={ClipboardList} label="Formulários" active={activeTab === 'Formulários'} onClick={() => handleTabChange('Formulários')} />
+          <SidebarItem icon={LinkIcon} label="Formulários p/ Clientes" active={activeTab === 'Formulários p/ Clientes'} onClick={() => handleTabChange('Formulários p/ Clientes')} />
+          <SidebarItem icon={PlusCircle} label="Criador de Formulários" active={activeTab === 'Criador de Formulários'} onClick={() => handleTabChange('Criador de Formulários')} />
           
           <SectionTitle>Presença Online</SectionTitle>
           <SidebarItem icon={Camera} label="Meus trabalhos" active={activeTab === 'Meus trabalhos'} onClick={() => handleTabChange('Meus trabalhos')} />
-          <SidebarItem icon={BookOpen} label="Seu" active={activeTab === 'Seu'} onClick={() => handleTabChange('Seu')} />
+          <SidebarItem icon={BookOpen} label="Seu Catálogo" active={activeTab === 'Seu Catálogo'} onClick={() => handleTabChange('Seu Catálogo')} />
           
           <SectionTitle>Operacional</SectionTitle>
-          <SidebarItem icon={Zap} label="Acesso Q" active={activeTab === 'Acesso Q'} onClick={() => handleTabChange('Acesso Q')} />
+          <SidebarItem icon={Zap} label="Acesso Rápido" active={activeTab === 'Acesso Rápido'} onClick={() => handleTabChange('Acesso Rápido')} />
           <SidebarItem icon={Calendar} label="Agenda" active={activeTab === 'Agenda'} onClick={() => handleTabChange('Agenda')} />
           <SidebarItem icon={Activity} label="Visão Geral" active={activeTab === 'Visão Geral'} onClick={() => handleTabChange('Visão Geral')} />
           <SidebarItem icon={Briefcase} label="Diagnóstico" active={activeTab === 'Diagnóstico'} onClick={() => handleTabChange('Diagnóstico')} />
-          <SidebarItem icon={Settings} label="Todos os serviços" active={activeTab === 'Todos os serviços'} onClick={() => handleTabChange('Todos os serviços')} />
+          <SidebarItem icon={Settings} label="Todos Serviços" active={activeTab === 'Todos Serviços'} onClick={() => handleTabChange('Todos Serviços')} />
+          
+          <SectionTitle>CRM</SectionTitle>
+          <SidebarItem icon={Users} label="Clientes" active={activeTab === 'Clientes'} onClick={() => handleTabChange('Clientes')} />
+          <SidebarItem icon={Calendar} label="Aniversariantes" active={activeTab === 'Aniversariantes'} onClick={() => handleTabChange('Aniversariantes')} />
+
+          <SectionTitle>Vendas & Atendimento</SectionTitle>
+          <SidebarItem icon={Lock} label={`Caixa Diário (${caixaStatus})`} active={activeTab === 'Caixa Diário'} onClick={() => handleTabChange('Caixa Diário')} />
+          <SidebarItem icon={FileText} label="Orçamentos" active={activeTab === 'Orçamentos'} onClick={() => handleTabChange('Orçamentos')} />
+          <SidebarItem icon={ClipboardList} label="Orçamentos (Kanban)" active={activeTab === 'Orçamentos (Kanban)'} onClick={() => handleTabChange('Orçamentos (Kanban)')} />
+          <SidebarItem icon={ClipboardList} label="Gerenciar Orçamentos" active={activeTab === 'Gerenciar Orçamentos'} onClick={() => handleTabChange('Gerenciar Orçamentos')} />
+          <SidebarItem icon={Users} label="Atendimentos" active={activeTab === 'Atendimentos'} onClick={() => handleTabChange('Atendimentos')} />
+          <SidebarItem icon={UserCheck} label="Cadastros" active={activeTab === 'Cadastros'} onClick={() => handleTabChange('Cadastros')} />
+          
+          <SectionTitle>Gestão</SectionTitle>
+          <SidebarItem icon={Package} label="Estoque" active={activeTab === 'Estoque'} onClick={() => handleTabChange('Estoque')} />
+          <SidebarItem icon={DollarSign} label="Financeiro" active={activeTab === 'Financeiro'} onClick={() => handleTabChange('Financeiro')} />
+          
+          <SectionTitle>Estratégia</SectionTitle>
+          <SidebarItem icon={Target} label="Crescimento" active={activeTab === 'Crescimento'} onClick={() => handleTabChange('Crescimento')} />
+          <SidebarItem icon={Megaphone} label="Marketing" active={activeTab === 'Marketing'} onClick={() => handleTabChange('Marketing')} />
+          <SidebarItem icon={Users} label="Análise de Clientes" active={activeTab === 'Análise de Clientes'} onClick={() => handleTabChange('Análise de Clientes')} />
+          <SidebarItem icon={BarChart3} label="Relatórios" active={activeTab === 'Relatórios'} onClick={() => handleTabChange('Relatórios')} />
         </div>
 
         <div className="p-4 border-t border-white/5">
@@ -675,16 +697,16 @@ const Dashboard = () => {
                 <BudgetManager />
               )}
 
-              {activeTab === 'Formulários para Clientes' && (
+              {activeTab === 'Formulários p/ Clientes' && (
                 <ClientForms />
               )}
 
-              {activeTab === 's' && (
+              {activeTab === 'Formulários' && (
                 <div className="bg-[#1a1d21] rounded-3xl border border-white/5 overflow-hidden">
                   <div className="p-6 border-b border-white/5 flex justify-between items-center">
                     <h3 className="text-xl font-bold">Meus Formulários</h3>
                     <button 
-                      onClick={() => handleTabChange('Criador de rolos')}
+                      onClick={() => handleTabChange('Criador de Formulários')}
                       className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all"
                     >
                       Novo Formulário
@@ -694,8 +716,8 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {activeTab === 'Criador de rolos' && (
-                <FormBuilder onSave={() => handleTabChange('s')} />
+              {activeTab === 'Criador de Formulários' && (
+                <FormBuilder onSave={() => handleTabChange('Formulários')} />
               )}
 
               {activeTab === 'Cadastros' && (
@@ -765,7 +787,7 @@ const Dashboard = () => {
               {activeTab === 'Meus trabalhos' && (
                 <MeusTrabalhosView />
               )}
-              {activeTab !== 'Início' && activeTab !== 'Cadastros' && activeTab !== 's' && activeTab !== 'Criador de rolos' && activeTab !== 'Clientes' && activeTab !== 'Aniversariantes' && activeTab !== 'Caixa Diário' && activeTab !== 'Atendimentos' && activeTab !== 'Meus trabalhos' && (
+              {activeTab !== 'Início' && activeTab !== 'Cadastros' && activeTab !== 'Formulários' && activeTab !== 'Criador de Formulários' && activeTab !== 'Clientes' && activeTab !== 'Aniversariantes' && activeTab !== 'Caixa Diário' && activeTab !== 'Atendimentos' && activeTab !== 'Meus trabalhos' && (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                   <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mb-6">
                     <Settings size={40} className="text-gray-600" />
@@ -2668,7 +2690,7 @@ const FormBuilder = ({ onSave }: { onSave: () => void }) => {
     <div className="space-y-8">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-2xl font-bold text-white">Criador de rolos</h3>
+          <h3 className="text-2xl font-bold text-white">Criador de Formulários</h3>
           <p className="text-gray-500">Crie formulários personalizados para seus clientes.</p>
         </div>
         <div className="flex gap-4">
@@ -3841,7 +3863,7 @@ const ClientForms = () => {
       {/* ... existing header ... */}
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-2xl font-bold text-white">Formulários para Clientes</h3>
+          <h3 className="text-2xl font-bold text-white">Formulários p/ Clientes</h3>
           <p className="text-gray-500">Disponibilize links para seus clientes solicitarem orçamentos e agendamentos.</p>
         </div>
         <button 
