@@ -72,7 +72,8 @@ import {
   User,
   Instagram,
   Images,
-  Share
+  Share,
+  Play
 } from 'lucide-react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -938,7 +939,7 @@ const Dashboard = () => {
               )}
 
               {activeTab === 'Orçamentos (Kanban)' && (
-                <KanbanDashboard />
+                <KanbanDashboard setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />
               )}
 
               {activeTab === 'Gerenciar Orçamentos' && (
@@ -3793,7 +3794,7 @@ const PDFView = ({ budget, onClose }: { budget: any, onClose: () => void }) => (
   </div>
 );
 
-const BudgetDetailsModal = ({ budget, onClose }: { budget: any, onClose: () => void }) => {
+const BudgetDetailsModal = ({ budget, onClose, setActiveTab, setActiveSubTab }: { budget: any, onClose: () => void, setActiveTab: (tab: string) => void, setActiveSubTab: (tab: 'Nova Comanda' | 'Comandas Abertas') => void }) => {
   const [showPDF, setShowPDF] = useState(false);
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
@@ -3803,10 +3804,10 @@ const BudgetDetailsModal = ({ budget, onClose }: { budget: any, onClose: () => v
           <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
         </div>
         <div className="p-6 space-y-6">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div><label className="block text-xs text-gray-500 font-bold uppercase mb-1">Status</label><select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10 text-white"><option>Aguardando Orçamento</option></select></div>
             <div><label className="block text-xs text-gray-500 font-bold uppercase mb-1">Motivo Não Fechar</label><select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10 text-white"><option></option></select></div>
-            <div className="col-span-2"><label className="block text-xs text-gray-500 font-bold uppercase mb-1">Cliente</label><select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10 text-white"><option>{budget.client}</option></select></div>
+            <div className="md:col-span-2"><label className="block text-xs text-gray-500 font-bold uppercase mb-1">Cliente</label><select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10 text-white"><option>{budget.client}</option></select></div>
             <div><label className="block text-xs text-gray-500 font-bold uppercase mb-1">Profissional</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10 text-white" defaultValue="Junior" /></div>
             <div><label className="block text-xs text-gray-500 font-bold uppercase mb-1">Serviço</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10 text-white" defaultValue={budget.service} /></div>
           </div>
@@ -3815,11 +3816,18 @@ const BudgetDetailsModal = ({ budget, onClose }: { budget: any, onClose: () => v
           <div className="border border-white/5 rounded-xl p-4 text-gray-400">+ Outros Anexos</div>
           <div className="border border-white/5 rounded-xl p-4 text-gray-400">+ Etiquetas</div>
         </div>
-        <div className="p-6 border-t border-white/5 flex justify-end gap-3">
-          <button onClick={onClose} className="px-6 py-3 rounded-xl border border-white/10 text-white hover:bg-white/5">Sair</button>
-          <button className="px-6 py-3 rounded-xl bg-gray-700 text-white font-bold hover:bg-gray-600 flex items-center gap-2"><Save size={18} /> Salvar e Responder Cliente</button>
-          <button className="px-6 py-3 rounded-xl bg-emerald-500 text-white font-bold hover:bg-emerald-600 flex items-center gap-2"><MessageCircle size={18} /> WhatsApp</button>
-          <button onClick={() => setShowPDF(true)} className="px-6 py-3 rounded-xl bg-white text-black font-bold hover:bg-gray-200 flex items-center gap-2"><FileText size={18} /> Ver Documento</button>
+        <div className="p-6 border-t border-white/5 flex flex-wrap justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl border border-white/10 text-white hover:bg-white/5">Sair</button>
+          <button className="px-4 py-2 rounded-xl bg-gray-700 text-white font-bold hover:bg-gray-600 flex items-center gap-2"><Save size={16} /> Salvar</button>
+          <button className="px-4 py-2 rounded-xl bg-emerald-500 text-white font-bold hover:bg-emerald-600 flex items-center gap-2"><MessageCircle size={16} /> WhatsApp</button>
+          <button onClick={() => setShowPDF(true)} className="px-4 py-2 rounded-xl bg-white text-black font-bold hover:bg-gray-200 flex items-center gap-2"><FileText size={16} /> Documento</button>
+          {/* Add Iniciar Sessão button here */}
+          <button onClick={() => {
+            localStorage.setItem('sessionData', JSON.stringify({ client: budget.clientName || budget.client, value: budget.value }));
+            setActiveTab('Atendimentos');
+            setActiveSubTab('Nova Comanda');
+            onClose();
+          }} className="px-4 py-2 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 flex items-center gap-2"><Play size={16} /> Iniciar Sessão</button>
         </div>
       </div>
       {showPDF && <PDFView budget={budget} onClose={() => setShowPDF(false)} />}
@@ -3827,7 +3835,7 @@ const BudgetDetailsModal = ({ budget, onClose }: { budget: any, onClose: () => v
   );
 };
 
-const KanbanDashboard = () => {
+const KanbanDashboard = ({ setActiveTab, setActiveSubTab }: { setActiveTab: (tab: string) => void, setActiveSubTab: (tab: 'Nova Comanda' | 'Comandas Abertas') => void }) => {
   const [view, setView] = useState<'kanban' | 'clientDetails'>('kanban');
   const [selectedBudget, setSelectedBudget] = useState<any>(null);
 
@@ -3859,7 +3867,7 @@ const KanbanDashboard = () => {
           </div>
         ))}
       </div>
-      {selectedBudget && <BudgetDetailsModal budget={selectedBudget} onClose={() => setSelectedBudget(null)} />}
+      {selectedBudget && <BudgetDetailsModal budget={selectedBudget} onClose={() => setSelectedBudget(null)} setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />}
     </div>
   );
 };
