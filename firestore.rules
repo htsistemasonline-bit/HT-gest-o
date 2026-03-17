@@ -39,11 +39,17 @@ service cloud.firestore {
 
     // Rules
     match /clients/{clientId} {
-      // Allow creation and reading by anyone (since Google Auth was removed)
-      allow read, create: if true;
-      allow update, delete: if true;
+      allow read, write: if true;
 
       match /followups/{followupId} {
+        allow read, write: if true;
+      }
+
+      match /documents/{docId} {
+        allow read, write: if true;
+      }
+
+      match /photos/{photoId} {
         allow read, write: if true;
       }
     }
@@ -58,6 +64,10 @@ service cloud.firestore {
 
     match /budgets/{budgetId} {
       allow read, write: if true;
+    }
+
+    match /comandas/{comandaId} {
+      allow read, write: if isAuthenticated();
     }
 
     match /inventory/{itemId} {

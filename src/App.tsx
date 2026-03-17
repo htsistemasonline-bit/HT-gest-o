@@ -4,6 +4,8 @@
  */
 
 import * as React from 'react';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import { useState, useEffect, useRef, useCallback, Component } from 'react';
 import * as XLSX from 'xlsx';
 import CalendarComponent from 'react-calendar';
@@ -48,6 +50,8 @@ import {
   QrCode,
   Download,
   CheckCircle2,
+  Calculator,
+  Settings2,
   Clock,
   Stethoscope,
   Star,
@@ -71,7 +75,8 @@ import {
   Share
 } from 'lucide-react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
-import { auth, db, handleFirestoreError, OperationType } from './firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, db, storage, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, addDoc, query, where, onSnapshot, orderBy, limit, getDocs, deleteDoc, doc, updateDoc, getDoc, setDoc, getDocFromServer } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
@@ -352,8 +357,178 @@ const RegistrationForm = () => {
   );
 };
 
+const PricingTableView = ({ config, onSave }: { config: any, onSave: (newConfig: any) => void }) => {
+  const [localConfig, setLocalConfig] = useState(config);
+
+  useEffect(() => {
+    setLocalConfig(config);
+  }, [config]);
+
+  const handleSave = async () => {
+    try {
+      await setDoc(doc(db, 'settings', 'pricing'), localConfig);
+      onSave(localConfig);
+      alert('Tabela de preços atualizada com sucesso!');
+    } catch (error) {
+      console.error('Error saving pricing config:', error);
+      alert('Erro ao salvar tabela de preços.');
+    }
+  };
+
+  return (
+    <div className="bg-[#1a1d21] rounded-3xl p-8 border border-white/5 max-w-5xl mx-auto">
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-orange-500/10 rounded-2xl text-orange-500">
+            <Calculator size={32} />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-white">Configuração de Preços</h2>
+            <p className="text-gray-500">Defina os valores e acréscimos para o cálculo automático.</p>
+          </div>
+        </div>
+        <button 
+          onClick={handleSave}
+          className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg shadow-orange-500/20 flex items-center gap-2"
+        >
+          <Save size={20} /> Salvar Alterações
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Valores Base */}
+        <div className="bg-[#0f1115] p-6 rounded-2xl border border-white/5 space-y-6">
+          <h3 className="text-lg font-bold text-white flex items-center gap-2 border-b border-white/5 pb-4">
+            <DollarSign size={20} className="text-orange-500" /> Valores Base
+          </h3>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Preço Mínimo (R$)</label>
+            <input 
+              type="number" 
+              value={localConfig.minPrice}
+              onChange={e => setLocalConfig({...localConfig, minPrice: parseFloat(e.target.value)})}
+              className="w-full bg-[#1a1d21] border border-white/10 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Preço por cm² (R$)</label>
+            <input 
+              type="number" 
+              value={localConfig.pricePerCm2}
+              onChange={e => setLocalConfig({...localConfig, pricePerCm2: parseFloat(e.target.value)})}
+              className="w-full bg-[#1a1d21] border border-white/10 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Acréscimos de Dificuldade e Cores */}
+        <div className="bg-[#0f1115] p-6 rounded-2xl border border-white/5 space-y-6">
+          <h3 className="text-lg font-bold text-white flex items-center gap-2 border-b border-white/5 pb-4">
+            <Zap size={20} className="text-orange-500" /> Acréscimos (%)
+          </h3>
+          <div className="space-y-4">
+            <p className="text-[10px] font-bold text-gray-600 uppercase">Dificuldade da Região</p>
+            {Object.entries(localConfig.difficultyMultipliers).map(([key, value]: [string, any]) => (
+              <div key={key} className="flex items-center gap-3">
+                <span className="text-xs text-gray-400 w-16">{key}</span>
+                <input 
+                  type="number" 
+                  value={value}
+                  onChange={e => setLocalConfig({
+                    ...localConfig, 
+                    difficultyMultipliers: { ...localConfig.difficultyMultipliers, [key]: parseFloat(e.target.value) }
+                  })}
+                  className="flex-1 bg-[#1a1d21] border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:border-orange-500 outline-none"
+                />
+                <span className="text-xs text-gray-600">%</span>
+              </div>
+            ))}
+          </div>
+          <div className="space-y-4 pt-4 border-t border-white/5">
+            <p className="text-[10px] font-bold text-gray-600 uppercase">Cores</p>
+            {Object.entries(localConfig.colorMultipliers).map(([key, value]: [string, any]) => (
+              <div key={key} className="flex items-center gap-3">
+                <span className="text-xs text-gray-400 w-24">{key}</span>
+                <input 
+                  type="number" 
+                  value={value}
+                  onChange={e => setLocalConfig({
+                    ...localConfig, 
+                    colorMultipliers: { ...localConfig.colorMultipliers, [key]: parseFloat(e.target.value) }
+                  })}
+                  className="flex-1 bg-[#1a1d21] border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:border-orange-500 outline-none"
+                />
+                <span className="text-xs text-gray-600">%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Outros Acréscimos e Políticas */}
+        <div className="bg-[#0f1115] p-6 rounded-2xl border border-white/5 space-y-6">
+          <h3 className="text-lg font-bold text-white flex items-center gap-2 border-b border-white/5 pb-4">
+            <Settings size={20} className="text-orange-500" /> Extras e Políticas
+          </h3>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Muito Detalhada (+%)</label>
+            <div className="flex items-center gap-3">
+              <input 
+                type="number" 
+                value={localConfig.detailMultiplier}
+                onChange={e => setLocalConfig({...localConfig, detailMultiplier: parseFloat(e.target.value)})}
+                className="w-full bg-[#1a1d21] border border-white/10 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
+              />
+              <span className="text-xs text-gray-600">%</span>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Cobertura (+%)</label>
+            <div className="flex items-center gap-3">
+              <input 
+                type="number" 
+                value={localConfig.coverUpMultiplier}
+                onChange={e => setLocalConfig({...localConfig, coverUpMultiplier: parseFloat(e.target.value)})}
+                className="w-full bg-[#1a1d21] border border-white/10 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
+              />
+              <span className="text-xs text-gray-600">%</span>
+            </div>
+          </div>
+          <div className="pt-4 border-t border-white/5 grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-600 uppercase mb-2">Sinal (%)</label>
+              <input 
+                type="number" 
+                value={localConfig.depositPercentage}
+                onChange={e => setLocalConfig({...localConfig, depositPercentage: parseFloat(e.target.value)})}
+                className="w-full bg-[#1a1d21] border border-white/10 rounded-xl px-3 py-2 text-white text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-600 uppercase mb-2">Desc. PIX (%)</label>
+              <input 
+                type="number" 
+                value={localConfig.cashDiscount}
+                onChange={e => setLocalConfig({...localConfig, cashDiscount: parseFloat(e.target.value)})}
+                className="w-full bg-[#1a1d21] border border-white/10 rounded-xl px-3 py-2 text-white text-sm"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className="mt-8 p-4 bg-orange-500/5 border border-orange-500/10 rounded-2xl flex items-start gap-3">
+        <Activity size={20} className="text-orange-500 mt-1 shrink-0" />
+        <p className="text-xs text-gray-400 leading-relaxed">
+          <span className="text-orange-500 font-bold">Como funciona o cálculo:</span> O sistema calcula primeiro o valor base (Área × Preço por cm² ou Preço Mínimo). Em seguida, soma todos os percentuais de acréscimo selecionados (Dificuldade + Cores + Detalhes + Cobertura) e aplica sobre o valor base. O sinal e o desconto à vista são calculados sobre o valor final.
+        </p>
+      </div>
+    </div>
+  );
+};
+
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('Início');
+  const [activeSubTab, setActiveSubTab] = useState<'Nova Comanda' | 'Comandas Abertas'>('Nova Comanda');
   const [caixaStatus, setCaixaStatus] = useState<'Aberto' | 'Fechado'>('Fechado');
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
   const [user, setUser] = useState<any>(null);
@@ -363,6 +538,24 @@ const Dashboard = () => {
   const [cadastrosSubView, setCadastrosSubView] = useState<string | null>(null);
   const [clients, setClients] = useState<any[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
+  const [pricingConfig, setPricingConfig] = useState({
+    minPrice: 130,
+    pricePerCm2: 10,
+    difficultyMultipliers: {
+      'Baixa': 0,
+      'Média': 20,
+      'Alta': 35
+    },
+    colorMultipliers: {
+      'Preto e Cinza': 0,
+      'Pouco Colorida': 25,
+      'Muito Colorida': 50
+    },
+    detailMultiplier: 40,
+    coverUpMultiplier: 50,
+    depositPercentage: 25,
+    cashDiscount: 10
+  });
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -399,6 +592,15 @@ const Dashboard = () => {
       setBudgets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'budgets');
+    });
+  }, []);
+
+  useEffect(() => {
+    const docRef = doc(db, 'settings', 'pricing');
+    return onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setPricingConfig(docSnap.data() as any);
+      }
     });
   }, []);
 
@@ -471,46 +673,53 @@ const Dashboard = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 pb-6 custom-scrollbar">
-          <SectionTitle>Principal</SectionTitle>
           <SidebarItem icon={Bell} label="Início" active={activeTab === 'Início'} onClick={() => handleTabChange('Início')} />
           
-          <SectionTitle>Formulários</SectionTitle>
-          <SidebarItem icon={ClipboardList} label="Formulários" active={activeTab === 'Formulários'} onClick={() => handleTabChange('Formulários')} />
-          <SidebarItem icon={LinkIcon} label="Formulários p/ Clientes" active={activeTab === 'Formulários p/ Clientes'} onClick={() => handleTabChange('Formulários p/ Clientes')} />
-          <SidebarItem icon={PlusCircle} label="Criador de Formulários" active={activeTab === 'Criador de Formulários'} onClick={() => handleTabChange('Criador de Formulários')} />
-          
-          <SectionTitle>Presença Online</SectionTitle>
-          <SidebarItem icon={Camera} label="Meus trabalhos" active={activeTab === 'Meus trabalhos'} onClick={() => handleTabChange('Meus trabalhos')} />
-          <SidebarItem icon={BookOpen} label="Seu Catálogo" active={activeTab === 'Seu Catálogo'} onClick={() => handleTabChange('Seu Catálogo')} />
-          
-          <SectionTitle>Operacional</SectionTitle>
-          <SidebarItem icon={Zap} label="Acesso Rápido" active={activeTab === 'Acesso Rápido'} onClick={() => handleTabChange('Acesso Rápido')} />
-          <SidebarItem icon={Calendar} label="Agenda" active={activeTab === 'Agenda'} onClick={() => handleTabChange('Agenda')} />
-          <SidebarItem icon={Activity} label="Visão Geral" active={activeTab === 'Visão Geral'} onClick={() => handleTabChange('Visão Geral')} />
-          <SidebarItem icon={Briefcase} label="Diagnóstico" active={activeTab === 'Diagnóstico'} onClick={() => handleTabChange('Diagnóstico')} />
-          <SidebarItem icon={Settings} label="Todos Serviços" active={activeTab === 'Todos Serviços'} onClick={() => handleTabChange('Todos Serviços')} />
-          
-          <SectionTitle>CRM</SectionTitle>
-          <SidebarItem icon={Users} label="Clientes" active={activeTab === 'Clientes'} onClick={() => handleTabChange('Clientes')} />
-          <SidebarItem icon={Calendar} label="Aniversariantes" active={activeTab === 'Aniversariantes'} onClick={() => handleTabChange('Aniversariantes')} />
+          <div className="my-4 border-t border-white/5" />
 
-          <SectionTitle>Vendas & Atendimento</SectionTitle>
+          <SidebarItem icon={Users} label="Clientes" active={activeTab === 'Clientes'} onClick={() => handleTabChange('Clientes')} />
+          <SidebarItem icon={UserCheck} label="Cadastros" active={activeTab === 'Cadastros'} onClick={() => handleTabChange('Cadastros')} />
+          <SidebarItem icon={Users} label="Atendimentos" active={activeTab === 'Atendimentos'} onClick={() => handleTabChange('Atendimentos')} />
+          <SidebarItem icon={Calendar} label="Aniversariantes" active={activeTab === 'Aniversariantes'} onClick={() => handleTabChange('Aniversariantes')} />
+          
+          <div className="my-4 border-t border-white/5" />
+
           <SidebarItem icon={Lock} label={`Caixa Diário (${caixaStatus})`} active={activeTab === 'Caixa Diário'} onClick={() => handleTabChange('Caixa Diário')} />
           <SidebarItem icon={FileText} label="Orçamentos" active={activeTab === 'Orçamentos'} onClick={() => handleTabChange('Orçamentos')} />
           <SidebarItem icon={ClipboardList} label="Orçamentos (Kanban)" active={activeTab === 'Orçamentos (Kanban)'} onClick={() => handleTabChange('Orçamentos (Kanban)')} />
           <SidebarItem icon={ClipboardList} label="Gerenciar Orçamentos" active={activeTab === 'Gerenciar Orçamentos'} onClick={() => handleTabChange('Gerenciar Orçamentos')} />
-          <SidebarItem icon={Users} label="Atendimentos" active={activeTab === 'Atendimentos'} onClick={() => handleTabChange('Atendimentos')} />
-          <SidebarItem icon={UserCheck} label="Cadastros" active={activeTab === 'Cadastros'} onClick={() => handleTabChange('Cadastros')} />
-          
-          <SectionTitle>Gestão</SectionTitle>
-          <SidebarItem icon={Package} label="Estoque" active={activeTab === 'Estoque'} onClick={() => handleTabChange('Estoque')} />
           <SidebarItem icon={DollarSign} label="Financeiro" active={activeTab === 'Financeiro'} onClick={() => handleTabChange('Financeiro')} />
+          <SidebarItem icon={Package} label="Estoque" active={activeTab === 'Estoque'} onClick={() => handleTabChange('Estoque')} />
+
+          <div className="my-4 border-t border-white/5" />
+
+          <SidebarItem icon={Calendar} label="Agenda" active={activeTab === 'Agenda'} onClick={() => handleTabChange('Agenda')} />
+          <SidebarItem icon={Activity} label="Visão Geral" active={activeTab === 'Visão Geral'} onClick={() => handleTabChange('Visão Geral')} />
+          <SidebarItem icon={Zap} label="Acesso Rápido" active={activeTab === 'Acesso Rápido'} onClick={() => handleTabChange('Acesso Rápido')} />
+          <SidebarItem icon={Briefcase} label="Diagnóstico" active={activeTab === 'Diagnóstico'} onClick={() => handleTabChange('Diagnóstico')} />
+          <SidebarItem icon={Settings} label="Todos Serviços" active={activeTab === 'Todos Serviços'} onClick={() => handleTabChange('Todos Serviços')} />
+
+          <div className="my-4 border-t border-white/5" />
+
+          <SidebarItem icon={ClipboardList} label="Formulários" active={activeTab === 'Formulários'} onClick={() => handleTabChange('Formulários')} />
+          <SidebarItem icon={LinkIcon} label="Formulários p/ Clientes" active={activeTab === 'Formulários p/ Clientes'} onClick={() => handleTabChange('Formulários p/ Clientes')} />
+          <SidebarItem icon={PlusCircle} label="Criador de Formulários" active={activeTab === 'Criador de Formulários'} onClick={() => handleTabChange('Criador de Formulários')} />
           
-          <SectionTitle>Estratégia</SectionTitle>
+          <div className="my-4 border-t border-white/5" />
+
+          <SidebarItem icon={Camera} label="Meus trabalhos" active={activeTab === 'Meus trabalhos'} onClick={() => handleTabChange('Meus trabalhos')} />
+          <SidebarItem icon={BookOpen} label="Seu Catálogo" active={activeTab === 'Seu Catálogo'} onClick={() => handleTabChange('Seu Catálogo')} />
+
+          <div className="my-4 border-t border-white/5" />
+
           <SidebarItem icon={Target} label="Crescimento" active={activeTab === 'Crescimento'} onClick={() => handleTabChange('Crescimento')} />
           <SidebarItem icon={Megaphone} label="Marketing" active={activeTab === 'Marketing'} onClick={() => handleTabChange('Marketing')} />
           <SidebarItem icon={Users} label="Análise de Clientes" active={activeTab === 'Análise de Clientes'} onClick={() => handleTabChange('Análise de Clientes')} />
           <SidebarItem icon={BarChart3} label="Relatórios" active={activeTab === 'Relatórios'} onClick={() => handleTabChange('Relatórios')} />
+          
+          <div className="my-4 border-t border-white/5" />
+          
+          <SidebarItem icon={Settings2} label="Tabela de Preços" active={activeTab === 'Tabela de Preços'} onClick={() => handleTabChange('Tabela de Preços')} />
         </div>
 
         <div className="p-4 border-t border-white/5">
@@ -580,7 +789,38 @@ const Dashboard = () => {
               transition={{ duration: 0.2 }}
             >
               {activeTab === 'Início' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="space-y-6">
+                  {/* Busca de Clientes */}
+                  <div className="bg-[#1a1d21] rounded-3xl p-6 border border-white/5">
+                    <div className="relative max-w-3xl">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+                      <input 
+                        type="text"
+                        placeholder="Buscar cliente pelo nome..."
+                        className="w-full bg-[#0f1115] border border-white/5 rounded-2xl pl-12 pr-4 py-4 text-lg text-white focus:border-[#00cc66] outline-none transition-all"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            setClientSearch(e.currentTarget.value);
+                            handleTabChange('Clientes');
+                          }
+                        }}
+                      />
+                      <button 
+                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-[#00cc66] hover:bg-[#00b359] text-white px-6 py-2 rounded-xl font-bold transition-all"
+                        onClick={(e) => {
+                          const input = e.currentTarget.parentElement?.querySelector('input');
+                          if (input) {
+                            setClientSearch(input.value);
+                            handleTabChange('Clientes');
+                          }
+                        }}
+                      >
+                        Buscar
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   {/* Quick Actions (Now at the top) */}
                   <div className="col-span-1 lg:col-span-4 bg-[#1a1d21] rounded-3xl p-8 border border-white/5">
                     <h3 className="text-xl font-bold mb-6">Ações Rápidas</h3>
@@ -624,6 +864,7 @@ const Dashboard = () => {
                     <StatCard title="Taxa de Conversão" value="68%" trend="+2%" icon={BarChart3} color="purple" />
                   </div>
                 </div>
+              </div>
               )}
 
               {activeTab === 'Clientes' && (
@@ -641,6 +882,13 @@ const Dashboard = () => {
                           className="w-full bg-[#0f1115] border border-white/5 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:border-orange-500 outline-none transition-all"
                         />
                       </div>
+                      <button 
+                        onClick={() => window.open('https://portal-do-cliente-teal.vercel.app/', '_blank')}
+                        className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2"
+                      >
+                        <Globe size={18} />
+                        Portal do Cliente
+                      </button>
                       <button 
                         onClick={exportToExcel}
                         className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap"
@@ -686,7 +934,7 @@ const Dashboard = () => {
               )}
 
               {activeTab === 'Orçamentos' && (
-                <BudgetDashboard onCreateBudget={() => handleTabChange('Gerenciar Orçamentos')} />
+                <BudgetDashboard onCreateBudget={() => handleTabChange('Gerenciar Orçamentos')} pricingConfig={pricingConfig} onTabChange={handleTabChange} />
               )}
 
               {activeTab === 'Orçamentos (Kanban)' && (
@@ -694,7 +942,7 @@ const Dashboard = () => {
               )}
 
               {activeTab === 'Gerenciar Orçamentos' && (
-                <BudgetManager />
+                <BudgetManager setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />
               )}
 
               {activeTab === 'Formulários p/ Clientes' && (
@@ -782,12 +1030,15 @@ const Dashboard = () => {
                 <InventoryView />
               )}
               {activeTab === 'Atendimentos' && (
-                <AtendimentosView />
+                <AtendimentosView clients={clients} activeSubTab={activeSubTab} setActiveSubTab={setActiveSubTab} />
               )}
               {activeTab === 'Meus trabalhos' && (
                 <MeusTrabalhosView />
               )}
-              {activeTab !== 'Início' && activeTab !== 'Cadastros' && activeTab !== 'Formulários' && activeTab !== 'Criador de Formulários' && activeTab !== 'Clientes' && activeTab !== 'Aniversariantes' && activeTab !== 'Caixa Diário' && activeTab !== 'Atendimentos' && activeTab !== 'Meus trabalhos' && (
+              {activeTab === 'Tabela de Preços' && (
+                <PricingTableView config={pricingConfig} onSave={setPricingConfig} />
+              )}
+              {activeTab !== 'Início' && activeTab !== 'Cadastros' && activeTab !== 'Formulários' && activeTab !== 'Criador de Formulários' && activeTab !== 'Clientes' && activeTab !== 'Aniversariantes' && activeTab !== 'Caixa Diário' && activeTab !== 'Atendimentos' && activeTab !== 'Meus trabalhos' && activeTab !== 'Orçamentos' && activeTab !== 'Tabela de Preços' && (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                   <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mb-6">
                     <Settings size={40} className="text-gray-600" />
@@ -2831,21 +3082,123 @@ const FormBuilder = ({ onSave }: { onSave: () => void }) => {
 
 const ClientDetailsModal = ({ client, onClose }: { client: any, onClose: () => void }) => {
   const [followUps, setFollowUps] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [photos, setPhotos] = useState<any[]>([]);
   const [newNote, setNewNote] = useState('');
   const [status, setStatus] = useState('Bom');
+  const [isEditingWork, setIsEditingWork] = useState(false);
+  const [workData, setWorkData] = useState({
+    totalValue: client.totalValue || '',
+    sessionsDone: client.sessionsDone || 0,
+    sessionsTotal: client.sessionsTotal || 1,
+    nextAppointment: client.nextAppointment || ''
+  });
 
   useEffect(() => {
     if (!client) return;
-    const q = query(
+    
+    // Follow-ups
+    const qFollowUps = query(
       collection(db, `clients/${client.id}/followups`),
       orderBy('date', 'desc')
     );
-    return onSnapshot(q, (snapshot) => {
+    const unsubFollowUps = onSnapshot(qFollowUps, (snapshot) => {
       setFollowUps(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'followups');
     });
+
+    // Documents
+    const qDocs = query(
+      collection(db, `clients/${client.id}/documents`),
+      orderBy('createdAt', 'desc')
+    );
+    const unsubDocs = onSnapshot(qDocs, (snapshot) => {
+      setDocuments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'documents');
+    });
+
+    // Photos
+    const qPhotos = query(
+      collection(db, `clients/${client.id}/photos`),
+      orderBy('createdAt', 'desc')
+    );
+    const unsubPhotos = onSnapshot(qPhotos, (snapshot) => {
+      setPhotos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'photos');
+    });
+
+    return () => {
+      unsubFollowUps();
+      unsubDocs();
+      unsubPhotos();
+    };
   }, [client]);
+
+  const handleUpdateWork = async () => {
+    try {
+      await updateDoc(doc(db, 'clients', client.id), {
+        ...workData
+      });
+      setIsEditingWork(false);
+    } catch (error) {
+      console.error("Erro ao atualizar informações de trabalho:", error);
+    }
+  };
+
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'document' | 'photo') => {
+    const file = e.target.files?.[0];
+    if (!file || !client) return;
+
+    setIsUploading(true);
+    try {
+      const storageRef = ref(storage, `clients/${client.id}/${type}s/${Date.now()}_${file.name}`);
+      const snapshot = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+
+      if (type === 'document') {
+        await addDoc(collection(db, `clients/${client.id}/documents`), {
+          name: file.name,
+          url: downloadURL,
+          createdAt: new Date().toISOString()
+        });
+      } else {
+        await addDoc(collection(db, `clients/${client.id}/photos`), {
+          url: downloadURL,
+          createdAt: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error(`Erro ao fazer upload de ${type}:`, error);
+      alert(`Erro ao fazer upload de ${type}. Verifique as permissões do Firebase Storage.`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleAddDocument = () => fileInputRef.current?.click();
+  const handleAddPhoto = () => photoInputRef.current?.click();
+
+  const handleAddAnamnese = async () => {
+    // This links to the system's anamnese logic
+    // For now, we'll create a placeholder document that represents the link
+    try {
+      await addDoc(collection(db, `clients/${client.id}/documents`), {
+        name: 'Ficha de Anamnese (Sistema)',
+        url: `${window.location.origin}/anamnese?clientId=${client.id}`,
+        type: 'anamnese',
+        createdAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Erro ao vincular anamnese:", error);
+    }
+  };
 
   const handleAddFollowUp = async () => {
     if (!newNote.trim()) return;
@@ -2916,93 +3269,227 @@ const ClientDetailsModal = ({ client, onClose }: { client: any, onClose: () => v
                 <MessageSquare size={18} />
                 WhatsApp
               </button>
-            </div>
-          </div>
-
-          {/* Healing Follow-up Section */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold flex items-center gap-2">
-                <Activity size={20} className="text-orange-500" />
-                Acompanhamento de Cicatrização
-              </h3>
-            </div>
-
-            {/* Add New Entry */}
-            <div className="bg-[#252930] p-6 rounded-2xl border border-white/5 space-y-4">
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="text-[10px] text-gray-500 uppercase font-bold mb-2 block">Status da Cicatrização</label>
-                  <div className="flex gap-2">
-                    {['Excelente', 'Bom', 'Regular', 'Ruim'].map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => setStatus(s)}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-                          status === s 
-                            ? 'bg-orange-500 text-white' 
-                            : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                        }`}
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-500 uppercase font-bold mb-2 block">Observações / Notas</label>
-                <textarea
-                  value={newNote}
-                  onChange={(e) => setNewNote(e.target.value)}
-                  placeholder="Descreva como está a cicatrização..."
-                  className="w-full bg-[#0f1115] border border-white/5 rounded-xl p-4 text-sm focus:border-orange-500 outline-none min-h-[100px] transition-all"
-                />
-              </div>
               <button 
-                onClick={handleAddFollowUp}
-                className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2"
+                onClick={() => window.open('https://portal-do-cliente-teal.vercel.app/', '_blank')}
+                className="w-full mt-3 bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
               >
-                <PlusCircle size={18} />
-                Registrar Evolução
+                <Globe size={18} />
+                Portal do Cliente
               </button>
             </div>
 
-            {/* History */}
-            <div className="space-y-4">
-              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Histórico de Evolução</h4>
-              {followUps.length === 0 ? (
-                <div className="text-center py-10 bg-white/2 rounded-2xl border border-dashed border-white/5">
-                  <p className="text-gray-500 text-sm">Nenhum registro de evolução ainda.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {followUps.map((item) => (
-                    <div key={item.id} className="bg-[#252930] p-5 rounded-2xl border border-white/5 flex gap-4">
-                      <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center flex-shrink-0">
-                        <Calendar size={20} className="text-gray-500" />
+            {/* Hidden Inputs for File Upload */}
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              className="hidden" 
+              onChange={(e) => handleFileUpload(e, 'document')}
+              accept=".pdf,.doc,.docx,.txt"
+            />
+            <input 
+              type="file" 
+              ref={photoInputRef} 
+              className="hidden" 
+              onChange={(e) => handleFileUpload(e, 'photo')}
+              accept="image/*"
+            />
+          </div>
+
+          {/* Main Content Section */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Work Info Section (Moved to main area) */}
+            <div className="bg-[#252930] p-8 rounded-3xl border border-white/5 shadow-xl">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <Briefcase size={22} className="text-orange-500" />
+                  Resumo do Trabalho
+                </h3>
+                <button 
+                  onClick={() => setIsEditingWork(!isEditingWork)}
+                  className="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-orange-500 transition-all"
+                >
+                  <Edit2 size={18} />
+                </button>
+              </div>
+              
+              {isEditingWork ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Valor Total do Trabalho</label>
+                      <input 
+                        type="text" 
+                        value={workData.totalValue}
+                        onChange={e => setWorkData({...workData, totalValue: e.target.value})}
+                        className="w-full bg-[#0f1115] border border-white/10 rounded-xl p-3 text-white focus:border-orange-500 outline-none"
+                        placeholder="R$ 0,00"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Sessões Realizadas</label>
+                        <input 
+                          type="number" 
+                          value={workData.sessionsDone}
+                          onChange={e => setWorkData({...workData, sessionsDone: parseInt(e.target.value)})}
+                          className="w-full bg-[#0f1115] border border-white/10 rounded-xl p-3 text-white focus:border-orange-500 outline-none"
+                        />
                       </div>
-                      <div className="flex-1">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <span className="text-[10px] font-bold text-gray-500 uppercase">{new Date(item.date).toLocaleDateString('pt-BR')}</span>
-                            <h5 className="font-bold text-white">{item.status}</h5>
-                          </div>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            item.status === 'Excelente' ? 'bg-green-600/10 text-green-600' :
-                            item.status === 'Bom' ? 'bg-blue-500/10 text-blue-500' :
-                            item.status === 'Regular' ? 'bg-orange-500/10 text-orange-500' :
-                            'bg-red-500/10 text-red-500'
-                          }`}>
-                            {item.status}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-400 leading-relaxed">{item.note}</p>
+                      <div>
+                        <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Total de Sessões</label>
+                        <input 
+                          type="number" 
+                          value={workData.sessionsTotal}
+                          onChange={e => setWorkData({...workData, sessionsTotal: parseInt(e.target.value)})}
+                          className="w-full bg-[#0f1115] border border-white/10 rounded-xl p-3 text-white focus:border-orange-500 outline-none"
+                        />
                       </div>
                     </div>
-                  ))}
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Próximo Agendamento</label>
+                      <input 
+                        type="date" 
+                        value={workData.nextAppointment}
+                        onChange={e => setWorkData({...workData, nextAppointment: e.target.value})}
+                        className="w-full bg-[#0f1115] border border-white/10 rounded-xl p-3 text-white focus:border-orange-500 outline-none"
+                      />
+                    </div>
+                    <div className="pt-6">
+                      <button 
+                        onClick={handleUpdateWork}
+                        className="w-full bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-orange-500/20 transition-all"
+                      >
+                        Salvar Alterações
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="bg-[#0f1115] p-5 rounded-2xl border border-white/5 flex flex-col justify-center">
+                    <span className="text-xs text-gray-500 uppercase font-bold mb-1">Valor do Trabalho</span>
+                    <span className="text-2xl font-black text-white">{workData.totalValue || 'R$ 0,00'}</span>
+                  </div>
+                  <div className="bg-[#0f1115] p-5 rounded-2xl border border-white/5 grid grid-cols-2 gap-4">
+                    <div className="text-center">
+                      <span className="text-[10px] text-gray-500 uppercase font-bold block mb-1">Realizadas</span>
+                      <span className="text-2xl font-black text-emerald-500">{workData.sessionsDone}</span>
+                    </div>
+                    <div className="text-center border-l border-white/5">
+                      <span className="text-[10px] text-gray-500 uppercase font-bold block mb-1">Restantes</span>
+                      <span className="text-2xl font-black text-orange-500">{Math.max(0, workData.sessionsTotal - workData.sessionsDone)}</span>
+                    </div>
+                  </div>
+                  <div className="bg-[#0f1115] p-5 rounded-2xl border border-white/5 flex items-center gap-4">
+                    <div className="w-12 h-12 bg-orange-500/10 rounded-xl flex items-center justify-center text-orange-500">
+                      <Calendar size={24} />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-gray-500 uppercase font-bold block">Próximo Agendamento</span>
+                      <span className="text-sm font-bold text-white">
+                        {workData.nextAppointment ? new Date(workData.nextAppointment).toLocaleDateString('pt-BR') : 'Não agendado'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
+            </div>
+
+            {/* Documents & Photos Tabs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Documents */}
+              <div className="bg-[#252930] p-6 rounded-2xl border border-white/5 flex flex-col h-[350px]">
+                <div className="flex justify-between items-center mb-6">
+                  <h4 className="text-sm font-bold flex items-center gap-2 uppercase tracking-wider">
+                    <FileText size={18} className="text-orange-500" />
+                    Documentos e Anamnese
+                  </h4>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={handleAddAnamnese}
+                      title="Vincular Anamnese do Sistema"
+                      className="p-2 bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500/20 transition-all"
+                    >
+                      <UserPlus size={18} />
+                    </button>
+                    <button 
+                      onClick={handleAddDocument} 
+                      title="Carregar Documento"
+                      className="p-2 bg-orange-500/10 text-orange-500 rounded-xl hover:bg-orange-500/20 transition-all"
+                    >
+                      <Plus size={18} />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
+                  {isUploading && (
+                    <div className="p-3 bg-orange-500/10 rounded-xl border border-orange-500/20 animate-pulse flex items-center gap-3">
+                      <RefreshCw size={16} className="animate-spin text-orange-500" />
+                      <span className="text-xs text-orange-500 font-bold">Enviando arquivo...</span>
+                    </div>
+                  )}
+                  {documents.length === 0 && !isUploading ? (
+                    <div className="flex flex-col items-center justify-center py-10 opacity-30">
+                      <FileUp size={40} className="mb-2" />
+                      <p className="text-xs font-bold uppercase">Nenhum documento</p>
+                    </div>
+                  ) : (
+                    documents.map(doc => (
+                      <div key={doc.id} className="flex items-center justify-between p-4 bg-[#0f1115] rounded-2xl border border-white/5 hover:border-orange-500/30 transition-all group">
+                        <div className="flex items-center gap-4 overflow-hidden">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${doc.type === 'anamnese' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-white/5 text-gray-500'}`}>
+                            {doc.type === 'anamnese' ? <UserCheck size={20} /> : <FileText size={20} />}
+                          </div>
+                          <div className="overflow-hidden">
+                            <p className="text-sm font-bold text-white truncate">{doc.name}</p>
+                            <p className="text-[10px] text-gray-500 uppercase">{new Date(doc.createdAt).toLocaleDateString('pt-BR')}</p>
+                          </div>
+                        </div>
+                        <a href={doc.url} target="_blank" rel="noopener noreferrer" className="p-2 bg-white/5 hover:bg-orange-500 text-gray-400 hover:text-white rounded-xl transition-all">
+                          <Download size={16} />
+                        </a>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Photos */}
+              <div className="bg-[#252930] p-6 rounded-2xl border border-white/5 flex flex-col h-[350px]">
+                <div className="flex justify-between items-center mb-6">
+                  <h4 className="text-sm font-bold flex items-center gap-2 uppercase tracking-wider">
+                    <Images size={18} className="text-orange-500" />
+                    Fotos do Trabalho
+                  </h4>
+                  <button 
+                    onClick={handleAddPhoto} 
+                    className="p-2 bg-orange-500/10 text-orange-500 rounded-xl hover:bg-orange-500/20 transition-all"
+                  >
+                    <Plus size={18} />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-3 custom-scrollbar">
+                  {photos.length === 0 && !isUploading ? (
+                    <div className="col-span-2 flex flex-col items-center justify-center py-10 opacity-30">
+                      <Camera size={40} className="mb-2" />
+                      <p className="text-xs font-bold uppercase">Nenhuma foto</p>
+                    </div>
+                  ) : (
+                    photos.map(photo => (
+                      <div key={photo.id} className="relative group aspect-square rounded-2xl overflow-hidden bg-[#0f1115] border border-white/5 shadow-lg">
+                        <img src={photo.url} alt="Trabalho" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-3">
+                          <a href={photo.url} target="_blank" rel="noopener noreferrer" className="p-3 bg-white/10 rounded-2xl text-white hover:bg-orange-500 transition-all">
+                            <Download size={20} />
+                          </a>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -3013,9 +3500,21 @@ const ClientDetailsModal = ({ client, onClose }: { client: any, onClose: () => v
 
 // --- Budget Components ---
 
-const NewBudgetModal = ({ onClose }: { onClose: () => void }) => {
+const NewBudgetModal = ({ onClose, pricingConfig, onBudgetCreated }: { onClose: () => void, pricingConfig: any, onBudgetCreated: () => void }) => {
   const [formData, setFormData] = useState({
-    client: '', professional: '', service: '', region: '', colors: '', sessions: '1', height: '', width: '', validity: '', installments: '1', value: '', paymentMethod: ''
+    client: '', 
+    service: '', 
+    region: '', 
+    colors: 'Preto e Cinza', 
+    sessions: '1', 
+    height: '', 
+    width: '', 
+    validity: '', 
+    value: '', 
+    paymentMethod: '', 
+    difficulty: 'Baixa',
+    isDetailed: false,
+    isCoverUp: false
   });
   const [clients, setClients] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -3030,6 +3529,30 @@ const NewBudgetModal = ({ onClose }: { onClose: () => void }) => {
     });
   }, []);
 
+  // Auto-calculate value
+  useEffect(() => {
+    const h = parseFloat(formData.height);
+    const w = parseFloat(formData.width);
+    
+    if (!isNaN(h) && !isNaN(w) && h > 0 && w > 0) {
+      const area = h * w;
+      const basePrice = Math.max(pricingConfig?.minPrice || 130, area * (pricingConfig?.pricePerCm2 || 10));
+      
+      let totalPercentage = 0;
+      totalPercentage += pricingConfig?.difficultyMultipliers?.[formData.difficulty] || 0;
+      totalPercentage += pricingConfig?.colorMultipliers?.[formData.colors] || 0;
+      if (formData.isDetailed) totalPercentage += pricingConfig?.detailMultiplier || 0;
+      if (formData.isCoverUp) totalPercentage += pricingConfig?.coverUpMultiplier || 0;
+
+      const calculatedValue = basePrice * (1 + totalPercentage / 100);
+      setFormData(prev => ({ ...prev, value: calculatedValue.toFixed(2) }));
+    }
+  }, [formData.height, formData.width, formData.difficulty, formData.colors, formData.isDetailed, formData.isCoverUp, pricingConfig]);
+
+  const depositValue = (parseFloat(formData.value) || 0) * ((pricingConfig?.depositPercentage || 25) / 100);
+  const cashValue = (parseFloat(formData.value) || 0) * (1 - (pricingConfig?.cashDiscount || 10) / 100);
+  const sessionValue = (parseFloat(formData.value) || 0) / (parseInt(formData.sessions) || 1);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -3038,7 +3561,11 @@ const NewBudgetModal = ({ onClose }: { onClose: () => void }) => {
         status: 'Pendente',
         createdAt: new Date().toISOString(),
         clientName: formData.client,
+        depositValue,
+        cashValue,
+        sessionValue
       });
+      onBudgetCreated();
       onClose();
     } catch (error) {
       console.error('Error adding budget:', error);
@@ -3047,108 +3574,183 @@ const NewBudgetModal = ({ onClose }: { onClose: () => void }) => {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#1a1d21] w-full max-w-4xl rounded-3xl border border-white/10 p-8 shadow-2xl">
+      <div className="bg-[#1a1d21] w-full max-w-5xl rounded-3xl border border-white/10 p-8 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-white">Orçamento</h3>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-orange-500/10 rounded-xl text-orange-500">
+              <Calculator size={24} />
+            </div>
+            <h3 className="text-xl font-bold text-white">Novo Orçamento</h3>
+          </div>
           <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={24} /></button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-2 gap-6">
-            <div className="relative">
-              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Cliente</label>
-              <input 
-                placeholder="Localize o Cliente" 
-                className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white"
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setShowClientDropdown(true);
-                }}
-              />
-              {showClientDropdown && (
-                <div className="absolute z-10 w-full bg-[#1a1d21] border border-white/10 rounded-xl mt-1 max-h-40 overflow-y-auto">
-                  {clients.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())).map(c => (
-                    <div key={c.id} className="p-3 hover:bg-white/5 cursor-pointer text-white" onClick={() => {
-                      setFormData({...formData, client: c.name});
-                      setSearchTerm(c.name);
-                      setShowClientDropdown(false);
-                    }}>
-                      {c.name}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Profissional</label>
-              <select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, professional: e.target.value})}>
-                <option value="">Selecione o Artista</option>
-                <option value="Artista 1">Artista 1</option>
-              </select>
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Serviço</label>
-              <select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, service: e.target.value})}>
-                <option value="">Selecione o Serviço</option>
-                <option value="Tattoo">Tattoo</option>
-                <option value="Piercing">Piercing</option>
-              </select>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-3 gap-6 p-4 border border-white/5 rounded-2xl">
-            <div>
-              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Região</label>
-              <select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, region: e.target.value})}>
-                <option value="">Selecione</option>
-                {['Cabeça', 'Pescoço', 'Ombro', 'Costas', 'Braço', 'Perna'].map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Coluna 1: Dados Básicos */}
+            <div className="space-y-6">
+              <div className="relative">
+                <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Cliente</label>
+                <input 
+                  placeholder="Localize o Cliente" 
+                  className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setShowClientDropdown(true);
+                  }}
+                />
+                {showClientDropdown && (
+                  <div className="absolute z-10 w-full bg-[#1a1d21] border border-white/10 rounded-xl mt-1 max-h-40 overflow-y-auto shadow-2xl">
+                    {clients.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())).map(c => (
+                      <div key={c.id} className="p-3 hover:bg-white/5 cursor-pointer text-white border-b border-white/5 last:border-0" onClick={() => {
+                        setFormData({...formData, client: c.name});
+                        setSearchTerm(c.name);
+                        setShowClientDropdown(false);
+                      }}>
+                        {c.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Serviço</label>
+                <select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, service: e.target.value})}>
+                  <option value="">Selecione o Serviço</option>
+                  <option value="Tattoo">Tattoo</option>
+                  <option value="Piercing">Piercing</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Validade do Orçamento</label>
+                <input type="date" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, validity: e.target.value})} />
+              </div>
             </div>
-            <div>
-              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Cores</label>
-              <select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, colors: e.target.value})}>
-                <option value="">Selecione</option>
-                {['Preto e Branco', 'Colorida', 'Preto e Cinza'].map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+
+            {/* Coluna 2: Condições do Projeto */}
+            <div className="space-y-6 bg-[#0f1115] p-6 rounded-2xl border border-white/5">
+              <h4 className="text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-4">Condições do Projeto</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] text-gray-500 font-bold uppercase block mb-2">Região</label>
+                  <select className="w-full bg-[#1a1d21] p-2 rounded-lg border border-white/5 text-white text-sm" onChange={e => setFormData({...formData, region: e.target.value})}>
+                    <option value="">Selecione</option>
+                    {['Cabeça', 'Pescoço', 'Ombro', 'Costas', 'Braço', 'Perna'].map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-500 font-bold uppercase block mb-2">Dificuldade</label>
+                  <select 
+                    className="w-full bg-[#1a1d21] p-2 rounded-lg border border-white/5 text-white text-sm" 
+                    value={formData.difficulty}
+                    onChange={e => setFormData({...formData, difficulty: e.target.value})}
+                  >
+                    <option value="Baixa">Baixa (0%)</option>
+                    <option value="Média">Média (+20%)</option>
+                    <option value="Alta">Alta (+35%)</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="text-[10px] text-gray-500 font-bold uppercase block mb-2">Cores</label>
+                  <select 
+                    className="w-full bg-[#1a1d21] p-2 rounded-lg border border-white/5 text-white text-sm" 
+                    value={formData.colors}
+                    onChange={e => setFormData({...formData, colors: e.target.value})}
+                  >
+                    <option value="Preto e Cinza">Preto e Cinza (0%)</option>
+                    <option value="Pouco Colorida">Pouco Colorida (+25%)</option>
+                    <option value="Muito Colorida">Muito Colorida (+50%)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 pt-2">
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <input 
+                    type="checkbox" 
+                    checked={formData.isDetailed}
+                    onChange={e => setFormData({...formData, isDetailed: e.target.checked})}
+                    className="w-4 h-4 rounded border-white/10 bg-[#1a1d21] text-orange-500"
+                  />
+                  <span className="text-xs text-gray-400 group-hover:text-white transition-colors">Muito Detalhada (+40%)</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <input 
+                    type="checkbox" 
+                    checked={formData.isCoverUp}
+                    onChange={e => setFormData({...formData, isCoverUp: e.target.checked})}
+                    className="w-4 h-4 rounded border-white/10 bg-[#1a1d21] text-orange-500"
+                  />
+                  <span className="text-xs text-gray-400 group-hover:text-white transition-colors">Cobertura de Tattoo (+50%)</span>
+                </label>
+              </div>
+
+              <div className="pt-4 border-t border-white/5">
+                <label className="text-[10px] text-gray-500 font-bold uppercase block mb-2">Tamanho</label>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <input 
+                      placeholder="Alt (cm)" 
+                      type="number" 
+                      value={formData.height}
+                      className="w-full bg-[#1a1d21] p-2 rounded-lg border border-white/5 text-white text-sm" 
+                      onChange={e => setFormData({...formData, height: e.target.value})} 
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <input 
+                      placeholder="Larg (cm)" 
+                      type="number" 
+                      value={formData.width}
+                      className="w-full bg-[#1a1d21] p-2 rounded-lg border border-white/5 text-white text-sm" 
+                      onChange={e => setFormData({...formData, width: e.target.value})} 
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Sessões</label>
-              <input type="number" value={formData.sessions} className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, sessions: e.target.value})} />
-            </div>
-            <div className="col-span-3">
-              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Tamanho</label>
-              <div className="flex gap-4">
-                <input placeholder="Altura(CM)" type="number" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, height: e.target.value})} />
-                <input placeholder="Largura(CM)" type="number" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, width: e.target.value})} />
+
+            {/* Coluna 3: Resultado e Pagamento */}
+            <div className="space-y-6">
+              <div className="bg-orange-500/5 p-6 rounded-2xl border border-orange-500/10 space-y-4">
+                <h4 className="text-[10px] font-bold text-orange-500 uppercase tracking-widest">Simulação de Valores</h4>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-end">
+                    <span className="text-xs text-gray-500">Valor Total:</span>
+                    <span className="text-2xl font-black text-white">R$ {formData.value || '0,00'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-y border-white/5">
+                    <span className="text-xs text-gray-500">Sinal ({pricingConfig?.depositPercentage}%):</span>
+                    <span className="text-sm font-bold text-orange-500">R$ {depositValue.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500">À Vista (PIX/Dinheiro -{pricingConfig?.cashDiscount}%):</span>
+                    <span className="text-sm font-bold text-emerald-500">R$ {cashValue.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] text-gray-500 font-bold uppercase block mb-2">Sessões</label>
+                  <input type="number" value={formData.sessions} className="w-full bg-[#0f1115] p-2 rounded-lg border border-white/5 text-white text-sm" onChange={e => setFormData({...formData, sessions: e.target.value})} />
+                </div>
+                <div className="flex items-end">
+                  <span className="text-xs text-gray-500 pb-2">Valor p/ Sessão: R$ {sessionValue.toFixed(2)}</span>
+                </div>
+                <div className="col-span-2">
+                  <label className="text-[10px] text-gray-500 font-bold uppercase block mb-2">Forma de Pagamento</label>
+                  <input placeholder="Ex: Cartão, PIX..." className="w-full bg-[#0f1115] p-2 rounded-lg border border-white/5 text-white text-sm" onChange={e => setFormData({...formData, paymentMethod: e.target.value})} />
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="p-4 border border-white/5 rounded-2xl grid grid-cols-3 gap-4">
-            <div className="col-span-3">
-              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Pagamento</label>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Válidade</label>
-              <input type="date" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, validity: e.target.value})} />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Parc.</label>
-              <input type="number" value={formData.installments} className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, installments: e.target.value})} />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 font-bold uppercase block mb-2">Valor(R$)</label>
-              <input type="number" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, value: e.target.value})} />
-            </div>
-            <div className="col-span-3">
-              <input placeholder="Pagamento" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/5 text-white" onChange={e => setFormData({...formData, paymentMethod: e.target.value})} />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-4 pt-4">
-            <button type="button" onClick={onClose} className="bg-white/5 hover:bg-white/10 text-white font-bold py-3 px-8 rounded-xl">Sair</button>
-            <button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-8 rounded-xl flex items-center gap-2">
-              <Save size={18} /> Salvar
+          <div className="flex justify-end gap-4 pt-4 border-t border-white/5">
+            <button type="button" onClick={onClose} className="bg-white/5 hover:bg-white/10 text-white font-bold py-3 px-8 rounded-xl transition-all">Cancelar</button>
+            <button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-12 rounded-xl flex items-center gap-2 shadow-lg shadow-orange-500/20 transition-all">
+              <Save size={20} /> Gerar Orçamento
             </button>
           </div>
         </form>
@@ -3157,7 +3759,7 @@ const NewBudgetModal = ({ onClose }: { onClose: () => void }) => {
   );
 };
 
-const BudgetCard = ({ budget, onEdit, key }: { budget: any, onEdit: (b: any) => void, key?: string }) => (
+const BudgetCard: React.FC<{ budget: any, onEdit: (b: any) => void }> = ({ budget, onEdit }) => (
   <div className="bg-[#0f1115] p-4 rounded-xl border border-white/5 mb-4">
     <p className="text-sm font-bold text-white">{budget.service}</p>
     <p className="text-xs text-gray-400 mb-2">{budget.client}</p>
@@ -3252,7 +3854,7 @@ const KanbanDashboard = () => {
           <div key={status} className="bg-[#1a1d21] rounded-3xl border border-white/5 p-6 w-80 flex-shrink-0">
             <h4 className="text-sm font-bold text-gray-400 uppercase mb-4">{status} {budgets.filter(b => b.status === status).length}</h4>
             {budgets.filter(b => b.status === status).map(b => (
-              <BudgetCard key={b.id} budget={b} onEdit={setSelectedBudget} />
+              <BudgetCard key={b.id.toString()} budget={b} onEdit={setSelectedBudget} />
             ))}
           </div>
         ))}
@@ -3450,9 +4052,43 @@ const CaixaDiario = ({ status, setStatus, setActiveTab }: { status: 'Aberto' | '
   );
 };
 
-const AtendimentosView = () => {
-  const [activeSubTab, setActiveSubTab] = useState<'Nova Comanda' | 'Comandas Abertas'>('Nova Comanda');
+const AtendimentosView = ({ clients, activeSubTab, setActiveSubTab }: { clients: any[], activeSubTab: 'Nova Comanda' | 'Comandas Abertas', setActiveSubTab: (tab: 'Nova Comanda' | 'Comandas Abertas') => void }) => {
   const [showQuickRegister, setShowQuickRegister] = useState(false);
+  const [clientSearch, setClientSearch] = useState('');
+  const [tattooValue, setTattooValue] = useState(0);
+  const [utensils, setUtensils] = useState<string[]>([]);
+  const [filteredClients, setFilteredClients] = useState<any[]>([]);
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [comandas, setComandas] = useState<any[]>([]);
+
+  useEffect(() => {
+    const sessionData = localStorage.getItem('sessionData');
+    if (sessionData) {
+      const { client, value } = JSON.parse(sessionData);
+      // Find client by name
+      const foundClient = clients.find(c => c.name === client);
+      if (foundClient) setSelectedClient(foundClient);
+      setTattooValue(Number(value) || 0);
+      localStorage.removeItem('sessionData');
+    }
+  }, [clients]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'comandas'), where('status', '==', 'Aberta'));
+    return onSnapshot(q, (snapshot) => {
+      setComandas(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'comandas');
+    });
+  }, []);
+
+  useEffect(() => {
+    if (clientSearch) {
+      setFilteredClients(clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase())));
+    } else {
+      setFilteredClients([]);
+    }
+  }, [clientSearch, clients]);
 
   return (
     <div className="space-y-6">
@@ -3476,13 +4112,28 @@ const AtendimentosView = () => {
 
         {activeSubTab === 'Nova Comanda' ? (
           <div className="space-y-4">
-            <div className="p-4 bg-[#0f1115] rounded-xl border border-white/5">
+            <div className="p-4 bg-[#0f1115] rounded-xl border border-white/5 relative">
               <label className="block text-sm font-bold text-white mb-2">Cliente</label>
               <input 
                 type="text" 
                 placeholder="Localize o Cliente" 
                 className="w-full bg-[#1a1d21] p-3 rounded-xl border border-white/10 text-white" 
+                value={clientSearch}
+                onChange={(e) => setClientSearch(e.target.value)}
               />
+              {filteredClients.length > 0 && (
+                <div className="absolute z-10 w-full bg-[#1a1d21] border border-white/10 rounded-xl mt-1 max-h-40 overflow-y-auto shadow-2xl">
+                  {filteredClients.map(c => (
+                    <div key={c.id} className="p-3 hover:bg-white/5 cursor-pointer text-white border-b border-white/5 last:border-0" onClick={() => {
+                      setSelectedClient(c);
+                      setClientSearch(c.name);
+                      setFilteredClients([]);
+                    }}>
+                      {c.name}
+                    </div>
+                  ))}
+                </div>
+              )}
               <button 
                 onClick={() => setShowQuickRegister(!showQuickRegister)}
                 className="text-orange-500 text-sm mt-2 font-bold"
@@ -3499,6 +4150,24 @@ const AtendimentosView = () => {
               )}
             </div>
             <div className="p-4 bg-[#0f1115] rounded-xl border border-white/5">
+              <label className="block text-sm font-bold text-white mb-2">Valor da Tattoo (R$)</label>
+              <input 
+                type="number" 
+                className="w-full bg-[#1a1d21] p-3 rounded-xl border border-white/10 text-white" 
+                placeholder="0,00"
+                onChange={(e) => setTattooValue(parseFloat(e.target.value))}
+              />
+            </div>
+            <div className="p-4 bg-[#0f1115] rounded-xl border border-white/5">
+              <label className="block text-sm font-bold text-white mb-2">Utensílios (separados por vírgula)</label>
+              <input 
+                type="text" 
+                className="w-full bg-[#1a1d21] p-3 rounded-xl border border-white/10 text-white" 
+                placeholder="Ex: Agulha, Batoque"
+                onChange={(e) => setUtensils(e.target.value.split(',').map(s => s.trim()))}
+              />
+            </div>
+            <div className="p-4 bg-[#0f1115] rounded-xl border border-white/5">
               <label className="block text-sm font-bold text-white mb-2">Atendente</label>
               <select className="w-full bg-[#1a1d21] p-3 rounded-xl border border-white/10 text-white">
                 <option>Selecione o Atendente</option>
@@ -3513,7 +4182,32 @@ const AtendimentosView = () => {
                 <option>Agendado</option>
               </select>
             </div>
-            <button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl uppercase">Abrir Comanda</button>
+            <button 
+              onClick={async () => {
+                console.log('Auth state:', auth.currentUser);
+                if (!selectedClient) {
+                  alert('Selecione um cliente!');
+                  return;
+                }
+                try {
+                  await addDoc(collection(db, 'comandas'), {
+                    clientName: selectedClient.name,
+                    clientId: selectedClient.id,
+                    createdAt: new Date().toISOString(),
+                    status: 'Aberta',
+                    tattooValue: tattooValue,
+                    utensils: utensils,
+                    items: []
+                  });
+                  setActiveSubTab('Comandas Abertas');
+                } catch (error) {
+                  handleFirestoreError(error, OperationType.WRITE, 'comandas');
+                }
+              }}
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl uppercase"
+            >
+              Abrir Comanda
+            </button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -3526,17 +4220,50 @@ const AtendimentosView = () => {
                     <th className="p-3">Comanda</th>
                     <th className="p-3">Cliente</th>
                     <th className="p-3">Entrada</th>
-                    <th className="p-3">Fila</th>
+                    <th className="p-3">Valor</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-white/5">
-                    <td className="p-3"><button className="bg-blue-500 text-white px-3 py-1 rounded">Abrir Comanda</button></td>
-                    <td className="p-3">748836</td>
-                    <td className="p-3">Luiz Silveira Da Conceicao Junior</td>
-                    <td className="p-3">12/03/2026 02:59</td>
-                    <td className="p-3">Agendado</td>
-                  </tr>
+                  {comandas.map(comanda => (
+                    <tr key={comanda.id} className="border-b border-white/5">
+                      <td className="p-3">
+                        <button 
+                          onClick={async () => {
+                            try {
+                              // Finalize comanda
+                              await updateDoc(doc(db, 'comandas', comanda.id), { status: 'Finalizada' });
+                              
+                              // Add transaction
+                              await addDoc(collection(db, 'transactions'), {
+                                type: 'Receita',
+                                amount: Number(comanda.tattooValue) || 0,
+                                date: new Date().toISOString(),
+                                description: `Comanda ${comanda.id} - ${comanda.clientName}`,
+                                category: 'Tattoo'
+                              });
+
+                              // Update client total paid
+                              const clientRef = doc(db, 'clients', comanda.clientId);
+                              const clientDoc = await getDoc(clientRef);
+                              if (clientDoc.exists()) {
+                                const currentTotal = clientDoc.data().totalPaid || 0;
+                                await updateDoc(clientRef, { totalPaid: Number(currentTotal) + Number(comanda.tattooValue || 0) });
+                              }
+                            } catch (error) {
+                              handleFirestoreError(error, OperationType.WRITE, 'comandas');
+                            }
+                          }}
+                          className="bg-green-500 text-white px-3 py-1 rounded"
+                        >
+                          Finalizar
+                        </button>
+                      </td>
+                      <td className="p-3">{comanda.id}</td>
+                      <td className="p-3">{comanda.clientName}</td>
+                      <td className="p-3">{new Date(comanda.createdAt).toLocaleString()}</td>
+                      <td className="p-3">R$ {comanda.tattooValue}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -3547,7 +4274,7 @@ const AtendimentosView = () => {
   );
 };
 
-const BudgetDashboard = ({ onCreateBudget }: { onCreateBudget: () => void }) => {
+const BudgetDashboard = ({ onCreateBudget, pricingConfig, onTabChange }: { onCreateBudget: () => void, pricingConfig: any, onTabChange: (tab: string) => void }) => {
   const [budgets, setBudgets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('Todos');
@@ -3572,7 +4299,7 @@ const BudgetDashboard = ({ onCreateBudget }: { onCreateBudget: () => void }) => 
 
   return (
     <div className="space-y-6">
-      {showNewModal && <NewBudgetModal onClose={() => setShowNewModal(false)} />}
+      {showNewModal && <NewBudgetModal onClose={() => setShowNewModal(false)} pricingConfig={pricingConfig} onBudgetCreated={() => onTabChange('Gerenciar Orçamentos')} />}
       <div className="flex items-center gap-4 bg-[#1a1d21] p-4 rounded-2xl border border-white/5">
         <button onClick={() => setShowNewModal(true)} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
           <Plus size={18} /> Novo Orçamento
@@ -3620,6 +4347,7 @@ const BudgetDashboard = ({ onCreateBudget }: { onCreateBudget: () => void }) => 
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4">Cliente</th>
                 <th className="px-6 py-4">Data</th>
+                <th className="px-6 py-4">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -3637,6 +4365,9 @@ const BudgetDashboard = ({ onCreateBudget }: { onCreateBudget: () => void }) => 
                   </td>
                   <td className="px-6 py-4 text-sm font-bold text-white">{budget.clientName}</td>
                   <td className="px-6 py-4 text-sm text-gray-400">{new Date(budget.createdAt).toLocaleDateString('pt-BR')}</td>
+                  <td className="px-6 py-4">
+                    <button onClick={() => setSelectedBudget(budget)} className="text-orange-500 text-xs font-bold hover:underline">Ver Detalhes</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -3647,7 +4378,56 @@ const BudgetDashboard = ({ onCreateBudget }: { onCreateBudget: () => void }) => 
   );
 };
 
-const BudgetManager = () => {
+
+const BudgetDetails = ({ budget, onClose, onUpdateStatus, onStartSession }: { budget: any, onClose: () => void, onUpdateStatus: (id: string, status: string) => void, onStartSession: (budget: any) => void }) => {
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    doc.text(`Orçamento - ${budget.clientName || budget.client || 'Não informado'}`, 10, 10);
+    doc.text(`Data: ${new Date(budget.createdAt).toLocaleDateString('pt-BR')}`, 10, 20);
+    doc.text(`Validade: ${budget.validity || 'Não informado'}`, 10, 30);
+    doc.text(`Serviço: ${budget.service || 'Não informado'}`, 10, 40);
+    doc.text(`Região: ${budget.region || 'Não informado'}`, 10, 50);
+    doc.text(`Cores: ${budget.colors || 'Não informado'}`, 10, 60);
+    doc.text(`Sessões: ${budget.sessions || '1'}`, 10, 70);
+    doc.text(`Tamanho: ${budget.height || 0}x${budget.width || 0} cm`, 10, 80);
+    doc.text(`Dificuldade: ${budget.difficulty || 'Baixa'}`, 10, 90);
+    doc.text(`Detalhada: ${budget.isDetailed ? 'Sim' : 'Não'}`, 10, 100);
+    doc.text(`Cobertura: ${budget.isCoverUp ? 'Sim' : 'Não'}`, 10, 110);
+    doc.text(`Valor Total: R$ ${parseFloat(budget.value)?.toFixed(2) || '0.00'}`, 10, 120);
+    doc.text(`Sinal: R$ ${budget.depositValue?.toFixed(2) || '0.00'}`, 10, 130);
+    doc.text(`Valor à Vista: R$ ${budget.cashValue?.toFixed(2) || '0.00'}`, 10, 140);
+    doc.text(`Valor p/ Sessão: R$ ${budget.sessionValue?.toFixed(2) || '0.00'}`, 10, 150);
+    doc.text(`Pagamento: ${budget.paymentMethod || 'Não informado'}`, 10, 160);
+    
+    doc.save(`orçamento_${budget.clientName || budget.client || 'cliente'}.pdf`);
+  };
+
+  return (
+    <div className="bg-[#1a1d21] w-full rounded-3xl border border-white/10 p-8 shadow-2xl">
+      <div className="flex justify-between items-center mb-6">
+        <h3 className="text-xl font-bold text-white">Detalhes do Orçamento</h3>
+        <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={24} /></button>
+      </div>
+      <div className="space-y-4 text-white">
+        <p><strong>Cliente:</strong> {budget.clientName || budget.client || 'Não informado'}</p>
+        <p><strong>Serviço:</strong> {budget.service || 'Não informado'}</p>
+        <p><strong>Validade:</strong> {budget.validity || 'Não informado'}</p>
+        <p><strong>Tamanho:</strong> {budget.height || 0}x{budget.width || 0} cm</p>
+        <p><strong>Valor Total:</strong> R$ {parseFloat(budget.value)?.toFixed(2) || '0.00'}</p>
+        <p><strong>Sinal:</strong> R$ {budget.depositValue?.toFixed(2) || '0.00'}</p>
+        <p><strong>Valor p/ Sessão:</strong> R$ {budget.sessionValue?.toFixed(2) || '0.00'}</p>
+      </div>
+      <div className="flex gap-4 mt-8">
+        <button onClick={generatePDF} className="bg-blue-500 text-white px-4 py-2 rounded-xl">Gerar PDF</button>
+        <button onClick={() => onUpdateStatus(budget.id, 'Aprovado')} className="bg-green-500 text-white px-4 py-2 rounded-xl">Aprovado</button>
+        <button onClick={() => onStartSession(budget)} className="bg-orange-500 text-white px-4 py-2 rounded-xl">Iniciar Sessão</button>
+        <button onClick={() => onUpdateStatus(budget.id, 'Arquivado')} className="bg-red-500 text-white px-4 py-2 rounded-xl">Dispensado</button>
+      </div>
+    </div>
+  );
+};
+
+const BudgetManager = ({ setActiveTab, setActiveSubTab }: { setActiveTab: (tab: string) => void, setActiveSubTab: (tab: 'Nova Comanda' | 'Comandas Abertas') => void }) => {
   const [budgets, setBudgets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('Todos');
@@ -3685,6 +4465,18 @@ const BudgetManager = () => {
 
   return (
     <div className="space-y-6">
+      {selectedBudget && (
+        <BudgetDetails 
+          budget={selectedBudget} 
+          onClose={() => setSelectedBudget(null)} 
+          onUpdateStatus={updateStatus} 
+          onStartSession={(budget) => {
+            localStorage.setItem('sessionData', JSON.stringify({ client: budget.clientName || budget.client, value: budget.value }));
+            setActiveTab('Atendimentos');
+            setActiveSubTab('Nova Comanda');
+          }}
+        />
+      )}
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-xl font-bold">Gerenciar Orçamentos</h3>
@@ -3775,66 +4567,6 @@ const BudgetManager = () => {
           )}
         </div>
       </div>
-
-      {selectedBudget && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <motion.div 
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-[#1a1d21] w-full max-w-2xl rounded-3xl border border-white/10 overflow-hidden shadow-2xl"
-          >
-            <div className="p-8 border-b border-white/5 flex justify-between items-center">
-              <div>
-                <h3 className="text-2xl font-bold text-white">Detalhes do Orçamento</h3>
-                <p className="text-gray-500 text-sm">Token: {selectedBudget.trackingToken}</p>
-              </div>
-              <button onClick={() => setSelectedBudget(null)} className="p-2 hover:bg-white/5 rounded-xl text-gray-400">
-                <X size={24} />
-              </button>
-            </div>
-            <div className="p-8 space-y-6">
-              <div className="grid grid-cols-2 gap-8">
-                <div>
-                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block mb-1">Cliente</label>
-                  <p className="text-white font-bold">{selectedBudget.clientName}</p>
-                  <p className="text-gray-400 text-sm">{selectedBudget.clientPhone}</p>
-                  <p className="text-gray-400 text-sm">{selectedBudget.clientEmail}</p>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block mb-1">Status Atual</label>
-                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${getStatusColor(selectedBudget.status)}`}>
-                    {selectedBudget.status}
-                  </span>
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block mb-1">Descrição da Tattoo</label>
-                <div className="bg-[#0f1115] p-4 rounded-2xl border border-white/5 text-gray-300 text-sm leading-relaxed">
-                  {selectedBudget.description || 'Nenhuma descrição fornecida.'}
-                </div>
-              </div>
-              <div className="pt-4 flex flex-col sm:flex-row gap-4">
-                <button 
-                  onClick={() => {
-                    const msg = `Olá ${selectedBudget.clientName}, aqui está o link para acompanhar seu orçamento: ${window.location.origin}/track/${selectedBudget.trackingToken}`;
-                    window.open(`https://wa.me/55${selectedBudget.clientPhone?.replace(/\D/g, '') || ''}?text=${encodeURIComponent(msg)}`, '_blank');
-                  }}
-                  className="flex-1 bg-[#25D366] hover:bg-[#128C7E] text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2"
-                >
-                  <Send size={18} />
-                  Enviar Link de Acompanhamento
-                </button>
-                <button 
-                  onClick={() => setSelectedBudget(null)}
-                  className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl transition-all"
-                >
-                  Fechar
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
     </div>
   );
 };
@@ -4309,6 +5041,7 @@ export default function App() {
           <Route path="/track/:token" element={<PublicTracking />} />
           <Route path="/cadastro" element={<RegistrationForm />} />
           <Route path="/portal" element={<ClientPortal />} />
+          <Route path="/anamnese" element={<ClientPortal />} />
           <Route path="/portfolio" element={<PublicPortfolio />} />
           <Route path="/*" element={<Dashboard />} />
         </Routes>
@@ -4440,9 +5173,24 @@ const PublicPortfolio = () => {
 };
 
 const ClientPortal = () => {
-  const [step, setStep] = useState('identify');
+  const [searchParams] = useSearchParams();
+  const initialClientId = searchParams.get('clientId');
+  const [step, setStep] = useState(initialClientId ? 'anamnesis' : 'identify');
   const [phone, setPhone] = useState('');
   const [client, setClient] = useState<any>(null);
+
+  useEffect(() => {
+    if (initialClientId) {
+      const fetchClient = async () => {
+        const docRef = doc(db, 'clients', initialClientId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setClient({ id: docSnap.id, ...docSnap.data() });
+        }
+      };
+      fetchClient();
+    }
+  }, [initialClientId]);
 
   const handleIdentify = async () => {
     const q = query(collection(db, 'clients'), where('phone', '==', phone));

@@ -102,6 +102,8 @@
     "/transactions": { "schema": "transactions", "description": "Coleção de transações financeiras" },
     "/portfolio": { "schema": "portfolio", "description": "Coleção de trabalhos" },
     "/folders": { "schema": "folders", "description": "Coleção de pastas" },
-    "/settings": { "schema": "settings", "description": "Coleção de configurações" }
+    "/settings": { "schema": "settings", "description": "Coleção de configurações" },
+    "/clients/{clientId}/documents": { "schema": "object", "description": "Documentos do cliente" },
+    "/clients/{clientId}/photos": { "schema": "object", "description": "Fotos do cliente" }
   }
 }
