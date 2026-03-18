@@ -38,6 +38,8 @@ import {
   UserCheck,
   PieChart,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Menu,
   X,
   LogOut,
@@ -50,6 +52,7 @@ import {
   QrCode,
   Download,
   CheckCircle2,
+  Check,
   Calculator,
   Settings2,
   Clock,
@@ -73,7 +76,8 @@ import {
   Instagram,
   Images,
   Share,
-  Play
+  Play,
+  FileEdit
 } from 'lucide-react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -714,6 +718,7 @@ const Dashboard = () => {
           <div className="my-4 border-t border-white/5" />
           
           <SidebarItem icon={Settings2} label="Tabela de Preços" active={activeTab === 'Tabela de Preços'} onClick={() => handleTabChange('Tabela de Preços')} />
+          <SidebarItem icon={FileEdit} label="Editar Anamnese" active={activeTab === 'Editar Anamnese'} onClick={() => handleTabChange('Editar Anamnese')} />
         </div>
 
         <div className="p-4 border-t border-white/5">
@@ -1032,7 +1037,10 @@ const Dashboard = () => {
               {activeTab === 'Tabela de Preços' && (
                 <PricingTableView config={pricingConfig} onSave={setPricingConfig} />
               )}
-              {activeTab !== 'Início' && activeTab !== 'Cadastros' && activeTab !== 'Formulários' && activeTab !== 'Criador de Formulários' && activeTab !== 'Clientes' && activeTab !== 'Aniversariantes' && activeTab !== 'Caixa Diário' && activeTab !== 'Atendimentos' && activeTab !== 'Meus trabalhos' && activeTab !== 'Orçamentos' && activeTab !== 'Tabela de Preços' && (
+              {activeTab === 'Editar Anamnese' && (
+                <EditarAnamneseView />
+              )}
+              {activeTab !== 'Início' && activeTab !== 'Cadastros' && activeTab !== 'Formulários' && activeTab !== 'Criador de Formulários' && activeTab !== 'Clientes' && activeTab !== 'Aniversariantes' && activeTab !== 'Caixa Diário' && activeTab !== 'Atendimentos' && activeTab !== 'Meus trabalhos' && activeTab !== 'Orçamentos' && activeTab !== 'Tabela de Preços' && activeTab !== 'Editar Anamnese' && (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                   <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mb-6">
                     <Settings size={40} className="text-gray-600" />
@@ -2886,7 +2894,7 @@ const FormsList = () => {
   );
 };
 
-const FormBuilder = ({ onSave, initialForm }: { onSave: () => void, initialForm?: any }) => {
+const FormBuilder = ({ onSave, initialForm, fixedTitle }: { onSave: () => void, initialForm?: any, fixedTitle?: boolean }) => {
   const [title, setTitle] = useState(initialForm?.title || '');
   const [fields, setFields] = useState<any[]>(initialForm?.fields || []);
   const [isSaving, setIsSaving] = useState(false);
@@ -2901,6 +2909,24 @@ const FormBuilder = ({ onSave, initialForm }: { onSave: () => void, initialForm?
 
   const updateField = (id: string, updates: any) => {
     setFields(fields.map(f => f.id === id ? { ...f, ...updates } : f));
+  };
+
+  const moveFieldUp = (index: number) => {
+    if (index === 0) return;
+    const newFields = [...fields];
+    const temp = newFields[index - 1];
+    newFields[index - 1] = newFields[index];
+    newFields[index] = temp;
+    setFields(newFields);
+  };
+
+  const moveFieldDown = (index: number) => {
+    if (index === fields.length - 1) return;
+    const newFields = [...fields];
+    const temp = newFields[index + 1];
+    newFields[index + 1] = newFields[index];
+    newFields[index] = temp;
+    setFields(newFields);
   };
 
   const handleSave = async () => {
@@ -2972,8 +2998,9 @@ const FormBuilder = ({ onSave, initialForm }: { onSave: () => void, initialForm?
                 type="text" 
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
+                disabled={fixedTitle}
                 placeholder="Ex: Ficha de Anamnese, Termo de Consentimento..."
-                className="w-full bg-[#0f1115] border border-white/5 rounded-2xl px-6 py-4 text-white focus:border-orange-500 outline-none transition-all"
+                className="w-full bg-[#0f1115] border border-white/5 rounded-2xl px-6 py-4 text-white focus:border-orange-500 outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
 
@@ -3000,38 +3027,94 @@ const FormBuilder = ({ onSave, initialForm }: { onSave: () => void, initialForm?
                     <div className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center text-gray-500 font-bold text-xs flex-shrink-0">
                       {index + 1}
                     </div>
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-[10px] text-gray-500 uppercase font-bold mb-2 block">Rótulo do Campo</label>
+                    <div className="flex-1 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-[10px] text-gray-500 uppercase font-bold mb-2 block">Rótulo do Campo / Texto</label>
+                          {field.type === 'text_block' ? (
+                            <textarea
+                              value={field.label}
+                              onChange={(e) => updateField(field.id, { label: e.target.value })}
+                              placeholder="Digite o texto longo aqui..."
+                              rows={4}
+                              className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:border-orange-500 outline-none transition-all"
+                            />
+                          ) : (
+                            <input 
+                              type="text" 
+                              value={field.label}
+                              onChange={(e) => updateField(field.id, { label: e.target.value })}
+                              placeholder="Ex: Nome Completo, Data de Nascimento..."
+                              className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:border-orange-500 outline-none transition-all"
+                            />
+                          )}
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 uppercase font-bold mb-2 block">Tipo de Resposta</label>
+                          <select 
+                            value={field.type}
+                            onChange={(e) => updateField(field.id, { type: e.target.value })}
+                            className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:border-orange-500 outline-none transition-all appearance-none"
+                          >
+                            <option value="text">Texto Curto</option>
+                            <option value="textarea">Texto Longo</option>
+                            <option value="number">Número</option>
+                            <option value="date">Data</option>
+                            <option value="checkbox">Caixa de Seleção</option>
+                            <option value="file">Anexo de Documento/Arquivo</option>
+                            <option value="client_select">Pesquisa de Cliente</option>
+                            <option value="text_block">Bloco de Texto (Apenas Leitura)</option>
+                            <option value="radio">Múltipla Escolha (Radio)</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2">
                         <input 
-                          type="text" 
-                          value={field.label}
-                          onChange={(e) => updateField(field.id, { label: e.target.value })}
-                          placeholder="Ex: Nome Completo, Data de Nascimento..."
-                          className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:border-orange-500 outline-none transition-all"
+                          type="checkbox" 
+                          checked={field.required || false}
+                          onChange={(e) => updateField(field.id, { required: e.target.checked })}
+                          className="w-4 h-4 accent-orange-500"
                         />
+                        <label className="text-xs text-gray-400">Campo Obrigatório</label>
                       </div>
-                      <div>
-                        <label className="text-[10px] text-gray-500 uppercase font-bold mb-2 block">Tipo de Resposta</label>
-                        <select 
-                          value={field.type}
-                          onChange={(e) => updateField(field.id, { type: e.target.value })}
-                          className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:border-orange-500 outline-none transition-all appearance-none"
-                        >
-                          <option value="text">Texto Curto</option>
-                          <option value="textarea">Texto Longo</option>
-                          <option value="number">Número</option>
-                          <option value="date">Data</option>
-                          <option value="checkbox">Caixa de Seleção</option>
-                        </select>
-                      </div>
+                      {field.type === 'radio' && (
+                        <div>
+                          <label className="text-[10px] text-gray-500 uppercase font-bold mb-2 block">Opções (separadas por vírgula)</label>
+                          <input 
+                            type="text" 
+                            value={field.options?.join(', ') || ''}
+                            onChange={(e) => updateField(field.id, { options: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                            placeholder="Ex: Sim, Não, Talvez"
+                            className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:border-orange-500 outline-none transition-all"
+                          />
+                        </div>
+                      )}
                     </div>
-                    <button 
-                      onClick={() => removeField(field.id)}
-                      className="p-2 hover:bg-red-500/20 rounded-lg text-gray-600 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                      <button 
+                        onClick={() => moveFieldUp(index)}
+                        disabled={index === 0}
+                        className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all disabled:opacity-30 disabled:hover:bg-transparent"
+                        title="Mover para cima"
+                      >
+                        <ChevronUp size={18} />
+                      </button>
+                      <button 
+                        onClick={() => moveFieldDown(index)}
+                        disabled={index === fields.length - 1}
+                        className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all disabled:opacity-30 disabled:hover:bg-transparent"
+                        title="Mover para baixo"
+                      >
+                        <ChevronDown size={18} />
+                      </button>
+                      <button 
+                        onClick={() => removeField(field.id)}
+                        className="p-2 hover:bg-red-500/20 rounded-lg text-gray-400 hover:text-red-500 transition-all"
+                        title="Excluir campo"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </motion.div>
                 ))}
 
@@ -3081,7 +3164,7 @@ const FormBuilder = ({ onSave, initialForm }: { onSave: () => void, initialForm?
   );
 };
 
-const ClientDetailsModal = ({ client, onClose }: { client: any, onClose: () => void }) => {
+const ClientDetailsModal = ({ client, onClose, onBack }: { client: any, onClose: () => void, onBack?: () => void }) => {
   const [followUps, setFollowUps] = useState<any[]>([]);
   const [documents, setDocuments] = useState<any[]>([]);
   const [photos, setPhotos] = useState<any[]>([]);
@@ -3093,6 +3176,13 @@ const ClientDetailsModal = ({ client, onClose }: { client: any, onClose: () => v
     sessionsDone: client.sessionsDone || 0,
     sessionsTotal: client.sessionsTotal || 1,
     nextAppointment: client.nextAppointment || ''
+  });
+  const [stats, setStats] = useState({
+    orcamentos: 0,
+    tatuagensFeitas: 0,
+    tatuagensEmAndamento: 0,
+    valoresPendentes: 0,
+    anamnesePreenchida: false
   });
 
   useEffect(() => {
@@ -3130,6 +3220,49 @@ const ClientDetailsModal = ({ client, onClose }: { client: any, onClose: () => v
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'photos');
     });
+
+    // Stats
+    const fetchStats = async () => {
+      try {
+        // Orçamentos
+        const qBudgets = query(collection(db, 'budgets'), where('clientId', '==', client.id));
+        const budgetsSnap = await getDocs(qBudgets);
+        const orcamentos = budgetsSnap.size;
+
+        // Comandas (Tatuagens)
+        const qComandas = query(collection(db, 'comandas'), where('clientId', '==', client.id));
+        const comandasSnap = await getDocs(qComandas);
+        let tatuagensFeitas = 0;
+        let tatuagensEmAndamento = 0;
+        let valoresPendentes = 0;
+
+        comandasSnap.forEach(doc => {
+          const data = doc.data();
+          if (data.status === 'Finalizada') {
+            tatuagensFeitas++;
+          } else if (data.status === 'Aberta') {
+            tatuagensEmAndamento++;
+            valoresPendentes += Number(data.tattooValue) || 0;
+          }
+        });
+
+        // Anamnese
+        const qAnamnese = query(collection(db, 'anamnese_responses'), where('clientId', '==', client.id));
+        const anamneseSnap = await getDocs(qAnamnese);
+        const anamnesePreenchida = !anamneseSnap.empty;
+
+        setStats({
+          orcamentos,
+          tatuagensFeitas,
+          tatuagensEmAndamento,
+          valoresPendentes,
+          anamnesePreenchida
+        });
+      } catch (error) {
+        console.error("Erro ao buscar estatísticas:", error);
+      }
+    };
+    fetchStats();
 
     return () => {
       unsubFollowUps();
@@ -3231,6 +3364,11 @@ const ClientDetailsModal = ({ client, onClose }: { client: any, onClose: () => v
       >
         <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#252930]">
           <div className="flex items-center gap-4">
+            {onBack && (
+              <button onClick={onBack} className="p-2 hover:bg-white/5 rounded-full text-gray-400 transition-all mr-2">
+                <ChevronRight className="rotate-180" size={24} />
+              </button>
+            )}
             <div className="w-12 h-12 bg-orange-500 rounded-2xl flex items-center justify-center text-white font-bold text-xl">
               {client.name.charAt(0)}
             </div>
@@ -3277,6 +3415,36 @@ const ClientDetailsModal = ({ client, onClose }: { client: any, onClose: () => v
                 <Globe size={18} />
                 Portal do Cliente
               </button>
+            </div>
+
+            <div className="bg-[#252930] p-6 rounded-2xl border border-white/5">
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Estatísticas</h4>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-400">Orçamentos</span>
+                  <span className="text-white font-bold bg-white/5 px-2 py-1 rounded-lg">{stats.orcamentos}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-400">Tatuagens Feitas</span>
+                  <span className="text-white font-bold bg-white/5 px-2 py-1 rounded-lg">{stats.tatuagensFeitas}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-400">Em Andamento</span>
+                  <span className="text-white font-bold bg-white/5 px-2 py-1 rounded-lg">{stats.tatuagensEmAndamento}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-400">Valores Pendentes</span>
+                  <span className="text-red-400 font-bold bg-red-500/10 px-2 py-1 rounded-lg">R$ {stats.valoresPendentes.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-400">Ficha Anamnese</span>
+                  {stats.anamnesePreenchida ? (
+                    <span className="text-emerald-400 font-bold bg-emerald-500/10 px-2 py-1 rounded-lg flex items-center gap-1"><Check size={14} /> Preenchida</span>
+                  ) : (
+                    <span className="text-red-400 font-bold bg-red-500/10 px-2 py-1 rounded-lg flex items-center gap-1"><X size={14} /> Pendente</span>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Hidden Inputs for File Upload */}
@@ -3836,17 +4004,13 @@ const BudgetDetailsModal = ({ budget, onClose, setActiveTab, setActiveSubTab }: 
 };
 
 const KanbanDashboard = ({ setActiveTab, setActiveSubTab }: { setActiveTab: (tab: string) => void, setActiveSubTab: (tab: 'Nova Comanda' | 'Comandas Abertas') => void }) => {
-  const [view, setView] = useState<'kanban' | 'clientDetails'>('kanban');
   const [selectedBudget, setSelectedBudget] = useState<any>(null);
+  const [showFormModal, setShowFormModal] = useState(false);
 
   const budgets = [
     { id: '1', service: 'Tatuagem', client: 'Luiz Silveira Da Conceicao Junior', date: '12/03/26', status: 'Novos Pedidos' },
     { id: '2', service: 'Harcanjo Ink', client: 'Luiz Silveira Da Conceicao Junior', date: '12/03/26', status: 'Novos Pedidos' },
   ];
-
-  if (view === 'clientDetails') {
-    return <ClientDetailsView onBack={() => setView('kanban')} />;
-  }
 
   return (
     <div className="space-y-6">
@@ -3854,7 +4018,7 @@ const KanbanDashboard = ({ setActiveTab, setActiveSubTab }: { setActiveTab: (tab
         <h3 className="text-xl font-bold text-white mb-6">Orçamentos</h3>
         <div className="flex gap-4">
           <button onClick={() => setSelectedBudget({})} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold">Novo Orçamento</button>
-          <button onClick={() => setView('clientDetails')} className="bg-orange-400 hover:bg-orange-500 text-white px-6 py-3 rounded-xl font-bold">Formulário para Cliente</button>
+          <button onClick={() => setShowFormModal(true)} className="bg-orange-400 hover:bg-orange-500 text-white px-6 py-3 rounded-xl font-bold">Formulário</button>
         </div>
       </div>
       <div className="flex gap-6 overflow-x-auto pb-4">
@@ -3868,74 +4032,12 @@ const KanbanDashboard = ({ setActiveTab, setActiveSubTab }: { setActiveTab: (tab
         ))}
       </div>
       {selectedBudget && <BudgetDetailsModal budget={selectedBudget} onClose={() => setSelectedBudget(null)} setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />}
+      {showFormModal && <ClientDatabaseModal onClose={() => setShowFormModal(false)} />}
     </div>
   );
 };
 
-const ClientDetailsView = ({ onBack }: { onBack: () => void }) => {
-  return (
-    <div className="space-y-6">
-      <button onClick={onBack} className="text-gray-400 hover:text-white mb-4">← Voltar</button>
-      <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-8 space-y-6 text-gray-300">
-        <h2 className="text-2xl font-bold text-orange-500">Solicite seu Orçamento</h2>
-        <p className="text-sm">Preencha todos os campos com atenção, todos os campos são importantes para que seu orçamento seja providenciado com maior agilidade! Obrigado!</p>
-        
-        <div className="space-y-4">
-          <div><label className="block text-sm font-bold text-white mb-1">Seu Nome *</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
-          <div><label className="block text-sm font-bold text-white mb-1">Sua Foto Rosto (Para seu Perfil)</label><div className="border-2 border-dashed border-white/10 p-6 text-center rounded-xl">Anexar Foto</div></div>
-          <div><label className="block text-sm font-bold text-white mb-1">Nascimento</label><input type="date" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
-          <div><label className="block text-sm font-bold text-white mb-1">Cidade</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
-          <div><label className="block text-sm font-bold text-white mb-1">Email</label><input type="email" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
-          <div><label className="block text-sm font-bold text-white mb-1">WhatsApp (Com DDD sem o Zero) *</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
-          <div><label className="block text-sm font-bold text-white mb-1">Como nos Conheceu?</label><select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10"><option>Selecione</option></select></div>
-          <div><label className="block text-sm font-bold text-white mb-1">Serviço</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
-          <div><label className="block text-sm font-bold text-white mb-1">Região do Corpo *</label><select className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10"><option>Qual Região do Corpo?</option></select></div>
-          <div><label className="block text-sm font-bold text-white mb-1">É Escrita? sabe a fonte?(Escolher Fonte), deixe o link ou o nome da fonte:</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
-          <div><label className="block text-sm font-bold text-white mb-1">Qual sua disponibilidade conforme Dias da semana e período do dia? *</label><input className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-sm font-bold text-white mb-1">Tamanho Altura * (cm)</label><input type="number" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
-            <div><label className="block text-sm font-bold text-white mb-1">Tamanho Largura * (cm)</label><input type="number" className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10" /></div>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-white mb-2">Cor?</label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2"><input type="radio" name="cor" /> Preto & Branco</label>
-              <label className="flex items-center gap-2"><input type="radio" name="cor" /> Preto & Cinza</label>
-              <label className="flex items-center gap-2"><input type="radio" name="cor" /> Colorida</label>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-white mb-2">Primeira Tattoo?</label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2"><input type="radio" name="primeira" /> Sim</label>
-              <label className="flex items-center gap-2"><input type="radio" name="primeira" /> Não</label>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-white mb-2">É Maior de Idade?</label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2"><input type="radio" name="maior" /> Sim</label>
-              <label className="flex items-center gap-2"><input type="radio" name="maior" /> Não</label>
-            </div>
-          </div>
-          <div><label className="block text-sm font-bold text-white mb-1">Descrição do que Deseja *</label><textarea className="w-full bg-[#0f1115] p-3 rounded-xl border border-white/10 h-32"></textarea></div>
-          
-          <div className="space-y-2">
-            <label className="block text-sm font-bold text-white">Anexe imagens para referência:</label>
-            <div className="border-2 border-dashed border-white/10 p-4 rounded-xl text-center">Anexar Foto do local</div>
-            <div className="border-2 border-dashed border-white/10 p-4 rounded-xl text-center">Anexar Imagem de Referência *</div>
-            <div className="border-2 border-dashed border-white/10 p-4 rounded-xl text-center">Anexar Outra Imagem de Referência</div>
-          </div>
 
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" /> Eu aceito as Políticas de Privacidade e Segurança dos Dados *</label>
-          <p className="text-xs text-gray-500">( * ) = Campos Obrigatórios</p>
-          
-          <button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl uppercase">Enviar Formulário</button>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const CaixaDiario = ({ status, setStatus, setActiveTab }: { status: 'Aberto' | 'Fechado', setStatus: (s: 'Aberto' | 'Fechado') => void, setActiveTab: (t: string) => void }) => {
   const [valorInicial, setValorInicial] = useState('');
@@ -4282,20 +4384,135 @@ const AtendimentosView = ({ clients, activeSubTab, setActiveSubTab }: { clients:
   );
 };
 
-const ClientFormModal = ({ onClose }: { onClose: () => void }) => {
+const ClientDatabaseModal = ({ onClose }: { onClose: () => void }) => {
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [clients, setClients] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showQuickRegister, setShowQuickRegister] = useState(false);
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientPhone, setNewClientPhone] = useState('');
+
+  useEffect(() => {
+    const q = query(collection(db, 'clients'), orderBy('name'));
+    return onSnapshot(q, (snapshot) => {
+      setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'clients');
+    });
+  }, []);
+
+  const handleQuickRegister = async () => {
+    if (!newClientName) return;
+    try {
+      const docRef = await addDoc(collection(db, 'clients'), {
+        name: newClientName,
+        phone: newClientPhone,
+        createdAt: new Date().toISOString()
+      });
+      const newClient = { id: docRef.id, name: newClientName, phone: newClientPhone, createdAt: new Date().toISOString() };
+      setSelectedClient(newClient);
+      setShowQuickRegister(false);
+      setNewClientName('');
+      setNewClientPhone('');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'clients');
+    }
+  };
+
+  const filteredClients = clients.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  if (selectedClient) {
+    return <ClientDetailsModal client={selectedClient} onClose={onClose} onBack={() => setSelectedClient(null)} />;
+  }
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-[#1a1d21] w-full max-w-4xl h-[80vh] rounded-3xl border border-white/10 p-8 shadow-2xl overflow-hidden flex flex-col">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-white">Formulário para Clientes</h3>
+          <h3 className="text-xl font-bold text-white">Banco de Dados do Cliente</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={24} /></button>
         </div>
-        <div className="flex-1 overflow-auto">
-          <iframe 
-            src={`${window.location.origin}/budget-request/orcamentosgestaoink`} 
-            className="w-full h-full border-0"
-            title="Formulário para Clientes"
-          />
+        
+        <div className="flex gap-4 mb-6">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+            <input 
+              type="text"
+              placeholder="Buscar cliente pelo nome..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-[#0f1115] border border-white/5 rounded-xl pl-12 pr-4 py-4 text-white focus:border-orange-500 outline-none transition-all"
+            />
+          </div>
+          <button 
+            onClick={() => setShowQuickRegister(!showQuickRegister)}
+            className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-4 rounded-xl font-bold flex items-center gap-2 whitespace-nowrap"
+          >
+            <Plus size={20} /> Novo Cliente
+          </button>
+        </div>
+
+        {showQuickRegister && (
+          <div className="bg-[#0f1115] border border-white/5 p-6 rounded-2xl mb-6 flex gap-4 items-end">
+            <div className="flex-1">
+              <label className="block text-xs text-gray-500 font-bold uppercase mb-1">Nome Completo</label>
+              <input 
+                type="text" 
+                value={newClientName}
+                onChange={(e) => setNewClientName(e.target.value)}
+                className="w-full bg-[#1a1d21] p-3 rounded-xl border border-white/10 text-white" 
+                placeholder="Ex: João da Silva"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs text-gray-500 font-bold uppercase mb-1">WhatsApp</label>
+              <input 
+                type="text" 
+                value={newClientPhone}
+                onChange={(e) => setNewClientPhone(e.target.value)}
+                className="w-full bg-[#1a1d21] p-3 rounded-xl border border-white/10 text-white" 
+                placeholder="Ex: 11999999999"
+              />
+            </div>
+            <button 
+              onClick={handleQuickRegister}
+              disabled={!newClientName}
+              className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-bold h-[46px]"
+            >
+              Salvar
+            </button>
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          {loading ? (
+            <div className="text-center text-gray-500 py-10">Carregando clientes...</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredClients.map(client => (
+                <div 
+                  key={client.id} 
+                  onClick={() => setSelectedClient(client)}
+                  className="bg-[#252930] p-4 rounded-2xl border border-white/5 hover:border-orange-500/50 cursor-pointer transition-all flex items-center gap-4"
+                >
+                  <div className="w-12 h-12 bg-orange-500/20 rounded-xl flex items-center justify-center text-orange-500 font-bold text-lg">
+                    {client.name.charAt(0)}
+                  </div>
+                  <div>
+                    <h4 className="text-white font-bold">{client.name}</h4>
+                    <p className="text-xs text-gray-400">{client.phone}</p>
+                  </div>
+                </div>
+              ))}
+              {filteredClients.length === 0 && !showQuickRegister && (
+                <div className="col-span-full text-center text-gray-500 py-10">
+                  Nenhum cliente encontrado. Clique em "Novo Cliente" para cadastrar.
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -4329,19 +4546,16 @@ const BudgetDashboard = ({ onCreateBudget, pricingConfig, onTabChange, setSelect
   return (
     <div className="space-y-6">
       {showNewModal && <NewBudgetModal onClose={() => setShowNewModal(false)} pricingConfig={pricingConfig} onBudgetCreated={() => onTabChange('Gerenciar Orçamentos')} />}
-      {showFormModal && <ClientFormModal onClose={() => setShowFormModal(false)} />}
+      {showFormModal && <ClientDatabaseModal onClose={() => setShowFormModal(false)} />}
       <div className="flex items-center gap-4 bg-[#1a1d21] p-4 rounded-2xl border border-white/5">
         <button onClick={() => setShowNewModal(true)} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
           <Plus size={18} /> Novo Orçamento
         </button>
         <button onClick={() => setShowFormModal(true)} className="bg-orange-400 hover:bg-orange-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
-          <LinkIcon size={18} /> Formulário para Clientes
+          <LinkIcon size={18} /> Formulário
         </button>
         <button onClick={() => onTabChange('Anamnese')} className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
           <Stethoscope size={18} /> Ficha de Anamnese
-        </button>
-        <button className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
-          <BarChart3 size={18} /> Funil de Vendas
         </button>
       </div>
 
@@ -4625,7 +4839,7 @@ const ClientForms = () => {
       {/* ... existing header ... */}
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-2xl font-bold text-white">Formulários p/ Clientes</h3>
+          <h3 className="text-2xl font-bold text-white">Formulários</h3>
           <p className="text-gray-500">Disponibilize links para seus clientes solicitarem orçamentos e agendamentos.</p>
         </div>
         <button 
@@ -4788,11 +5002,26 @@ const ClientForms = () => {
 const PublicBudgetRequest = () => {
   const [formData, setFormData] = useState({
     name: '',
+    photo: '',
+    birthDate: '',
+    city: '',
     email: '',
     phone: '',
-    birthDate: '',
-    cpf: '',
-    description: ''
+    howDidYouKnow: '',
+    service: '',
+    bodyPart: '',
+    isWriting: '',
+    availability: '',
+    height: '',
+    width: '',
+    color: '',
+    firstTattoo: '',
+    isAdult: '',
+    description: '',
+    bodyPartImage: '',
+    referenceImage1: '',
+    referenceImage2: '',
+    acceptedTerms: false
   });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -4800,6 +5029,10 @@ const PublicBudgetRequest = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.acceptedTerms) {
+      alert('Você precisa aceitar as Políticas de Privacidade e Segurança dos Dados.');
+      return;
+    }
     setLoading(true);
     const token = Math.random().toString(36).substring(2, 15);
     try {
@@ -4808,7 +5041,17 @@ const PublicBudgetRequest = () => {
         clientEmail: formData.email,
         clientPhone: formData.phone,
         clientBirthDate: formData.birthDate,
-        clientCpf: formData.cpf,
+        clientCity: formData.city,
+        howDidYouKnow: formData.howDidYouKnow,
+        service: formData.service,
+        bodyPart: formData.bodyPart,
+        isWriting: formData.isWriting,
+        availability: formData.availability,
+        height: formData.height,
+        width: formData.width,
+        color: formData.color,
+        firstTattoo: formData.firstTattoo,
+        isAdult: formData.isAdult,
         description: formData.description,
         status: 'Pendente',
         trackingToken: token,
@@ -4883,6 +5126,13 @@ const PublicBudgetRequest = () => {
               />
             </div>
 
+            <div className="space-y-4">
+              <label className="block text-xs font-bold text-gray-500 uppercase">Sua Foto Rosto (Para seu Perfil)</label>
+              <div className="border-2 border-dashed border-white/10 p-6 text-center rounded-xl text-gray-500 hover:text-white hover:border-white/30 cursor-pointer transition-all">
+                Anexar Foto
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <label className="block text-xs font-bold text-gray-500 uppercase">Nascimento</label>
@@ -4894,11 +5144,11 @@ const PublicBudgetRequest = () => {
                 />
               </div>
               <div className="space-y-4">
-                <label className="block text-xs font-bold text-gray-500 uppercase">CPF</label>
+                <label className="block text-xs font-bold text-gray-500 uppercase">Cidade</label>
                 <input 
                   type="text" 
-                  value={formData.cpf}
-                  onChange={e => setFormData({...formData, cpf: e.target.value})}
+                  value={formData.city}
+                  onChange={e => setFormData({...formData, city: e.target.value})}
                   className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
                 />
               </div>
@@ -4915,7 +5165,7 @@ const PublicBudgetRequest = () => {
                 />
               </div>
               <div className="space-y-4">
-                <label className="block text-xs font-bold text-gray-500 uppercase">WhatsApp (Com DDD) *</label>
+                <label className="block text-xs font-bold text-gray-500 uppercase">WhatsApp (Com DDD sem o Zero) *</label>
                 <input 
                   required
                   type="tel" 
@@ -4926,15 +5176,211 @@ const PublicBudgetRequest = () => {
               </div>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <label className="block text-xs font-bold text-gray-500 uppercase">Como nos Conheceu?</label>
+                <select 
+                  value={formData.howDidYouKnow}
+                  onChange={e => setFormData({...formData, howDidYouKnow: e.target.value})}
+                  className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
+                >
+                  <option value="">Selecione</option>
+                  <option value="Instagram">Instagram</option>
+                  <option value="Facebook">Facebook</option>
+                  <option value="Google">Google</option>
+                  <option value="Indicação">Indicação</option>
+                  <option value="Outros">Outros</option>
+                </select>
+              </div>
+              <div className="space-y-4">
+                <label className="block text-xs font-bold text-gray-500 uppercase">Serviço</label>
+                <input 
+                  type="text" 
+                  value={formData.service}
+                  onChange={e => setFormData({...formData, service: e.target.value})}
+                  className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
+                />
+              </div>
+            </div>
+
             <div className="space-y-4">
-              <label className="block text-xs font-bold text-gray-500 uppercase">Descrição da Tattoo</label>
+              <label className="block text-xs font-bold text-gray-500 uppercase">Região do Corpo *</label>
+              <select 
+                required
+                value={formData.bodyPart}
+                onChange={e => setFormData({...formData, bodyPart: e.target.value})}
+                className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
+              >
+                <option value="">Qual Região do Corpo?</option>
+                <option value="Braço">Braço</option>
+                <option value="Perna">Perna</option>
+                <option value="Costas">Costas</option>
+                <option value="Peito">Peito</option>
+                <option value="Outro">Outro</option>
+              </select>
+            </div>
+
+            <div className="space-y-4">
+              <label className="block text-xs font-bold text-gray-500 uppercase">É Escrita? sabe a fonte?(Escolher Fonte), deixe o link ou o nome da fonte:</label>
+              <input 
+                type="text" 
+                value={formData.isWriting}
+                onChange={e => setFormData({...formData, isWriting: e.target.value})}
+                className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
+              />
+            </div>
+
+            <div className="space-y-4">
+              <label className="block text-xs font-bold text-gray-500 uppercase">Qual sua disponibilidade conforme Dias da semana e período do dia? *</label>
+              <input 
+                required
+                type="text" 
+                value={formData.availability}
+                onChange={e => setFormData({...formData, availability: e.target.value})}
+                className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <label className="block text-xs font-bold text-gray-500 uppercase">Tamanho Altura * (cm)</label>
+                <input 
+                  required
+                  type="number" 
+                  value={formData.height}
+                  onChange={e => setFormData({...formData, height: e.target.value})}
+                  className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
+                />
+              </div>
+              <div className="space-y-4">
+                <label className="block text-xs font-bold text-gray-500 uppercase">Tamanho Largura * (cm)</label>
+                <input 
+                  required
+                  type="number" 
+                  value={formData.width}
+                  onChange={e => setFormData({...formData, width: e.target.value})}
+                  className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Cor?</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <input type="radio" name="color" value="Preto & Branco" checked={formData.color === 'Preto & Branco'} onChange={e => setFormData({...formData, color: e.target.value})} className="text-orange-500 focus:ring-orange-500" /> Preto & Branco
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <input type="radio" name="color" value="Preto & Cinza" checked={formData.color === 'Preto & Cinza'} onChange={e => setFormData({...formData, color: e.target.value})} className="text-orange-500 focus:ring-orange-500" /> Preto & Cinza
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <input type="radio" name="color" value="Colorida" checked={formData.color === 'Colorida'} onChange={e => setFormData({...formData, color: e.target.value})} className="text-orange-500 focus:ring-orange-500" /> Colorida
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Primeira Tattoo?</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <input type="radio" name="firstTattoo" value="Sim" checked={formData.firstTattoo === 'Sim'} onChange={e => setFormData({...formData, firstTattoo: e.target.value})} className="text-orange-500 focus:ring-orange-500" /> Sim
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <input type="radio" name="firstTattoo" value="Não" checked={formData.firstTattoo === 'Não'} onChange={e => setFormData({...formData, firstTattoo: e.target.value})} className="text-orange-500 focus:ring-orange-500" /> Não
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-2">É Maior de Idade?</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <input type="radio" name="isAdult" value="Sim" checked={formData.isAdult === 'Sim'} onChange={e => setFormData({...formData, isAdult: e.target.value})} className="text-orange-500 focus:ring-orange-500" /> Sim
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <input type="radio" name="isAdult" value="Não" checked={formData.isAdult === 'Não'} onChange={e => setFormData({...formData, isAdult: e.target.value})} className="text-orange-500 focus:ring-orange-500" /> Não
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <label className="block text-xs font-bold text-gray-500 uppercase">Descrição do que Deseja *</label>
               <textarea 
+                required
                 rows={4}
                 value={formData.description}
                 onChange={e => setFormData({...formData, description: e.target.value})}
                 className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all resize-none"
                 placeholder="Conte-nos sobre sua ideia, local do corpo, tamanho aproximado..."
               ></textarea>
+            </div>
+
+            <div className="space-y-4">
+              <label className="block text-xs font-bold text-gray-500 uppercase">Anexe imagens para referência:</label>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Anexar Foto do local</label>
+                  <input 
+                    type="file" 
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => setFormData({...formData, bodyPartImage: reader.result as string});
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-2 text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-500 file:text-white hover:file:bg-orange-600"
+                    accept="image/*"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Anexar Imagem de Referência *</label>
+                  <input 
+                    required
+                    type="file" 
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => setFormData({...formData, referenceImage1: reader.result as string});
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-2 text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-500 file:text-white hover:file:bg-orange-600"
+                    accept="image/*"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Anexar Outra Imagem de Referência</label>
+                  <input 
+                    type="file" 
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => setFormData({...formData, referenceImage2: reader.result as string});
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-2 text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-500 file:text-white hover:file:bg-orange-600"
+                    accept="image/*"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-4 border-t border-white/5">
+              <label className="flex items-center gap-3 text-sm text-gray-300 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={formData.acceptedTerms}
+                  onChange={e => setFormData({...formData, acceptedTerms: e.target.checked})}
+                  className="w-5 h-5 rounded border-white/10 text-orange-500 focus:ring-orange-500 bg-[#0f1115]" 
+                /> 
+                Eu aceito as Políticas de Privacidade e Segurança dos Dados *
+              </label>
+              <p className="text-xs text-gray-500 ml-8">( * ) = Campos Obrigatórios</p>
             </div>
 
             <button 
@@ -5101,6 +5547,83 @@ const CriadorDeFormulariosView = () => {
   return <FormBuilder initialForm={editingForm} onSave={() => setEditingForm(undefined)} />;
 };
 
+const EditarAnamneseView = () => {
+  const [form, setForm] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchForm = async () => {
+      const q = query(collection(db, 'forms'), where('title', '==', 'Ficha Anamnese'), limit(1));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        setForm({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
+      } else {
+        setForm({ 
+          title: 'Ficha Anamnese', 
+          fields: [
+            { id: '0', label: 'Nome do Cliente', type: 'client_select' },
+            { id: 'intro', label: 'Questionário pré procedimento\nAntes de começarmos…\nPara garantir a segurança e o sucesso do seu procedimento, preparamos uma ficha de anamnese que precisa ser preenchida antes da sua tatuagem.\nEla contém perguntas importantes sobre sua saúde e seu histórico médico, além de hábitos que podem interferir no procedimento. Pedimos que responda todas as perguntas de forma clara e honesta, pois essas informações são essenciais para que possamos planejar sua tatuagem com segurança e qualidade.\n\nCaso tenha dúvidas ao preencher, estarei à disposição para ajudar!', type: 'text_block' },
+            { id: '14', label: 'Está em tratamento medico', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '15', label: 'Alergia?', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '16', label: 'Pergunta qual sua alergia?', type: 'text' },
+            { id: '17', label: 'Cirurgia recente?', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '18', label: 'Possui Hipertensão ou é Hemofilico?', type: 'radio', options: ['Hipertensão', 'Hemofílico', 'Não possuo'] },
+            { id: '19', label: 'Tendência a quelóides', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '20', label: 'Vitiligo?', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '21', label: 'Portador de marcapasso?', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '22', label: 'Possui cardiopatia?', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '23', label: 'Alguma doença transmissível?', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '24', label: 'Se possui alguma doença transmissível especifique.', type: 'text' },
+            { id: '25', label: 'Histórico de convulsão/ epilepsia?', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '26', label: 'Distúrbio circulatório?', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '27', label: 'Você está sob o efeito de drogas/álcool', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '28', label: 'Hepatite', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '29', label: 'Qual tipo de hepatite você tem?', type: 'text' },
+            { id: '30', label: 'Problema de pele/cicatrização?', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '31', label: 'Se tem algum problema de pele especifique.', type: 'text' },
+            { id: '32', label: 'Fumante?', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '33', label: 'Está com a pele bronzeada?', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '34', label: 'Tipo sanguíneo?', type: 'text' },
+            { id: '35', label: 'Sofre de', type: 'radio', options: ['Depressão', 'Panico', 'Ansiedade', 'Inrritabilidade', 'Nenhuma'] },
+            { id: '36', label: 'Alimentou-se/hidratou-se e descansou bem nas últimas 24h?', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '37', label: 'Existe algum problema que julgue necessário informar o tatuador?', type: 'textarea' },
+            { id: 'termo', label: 'TERMO DE AUTORIZAÇÃO DE USO DE IMAGEM PARA REDES SOCIAIS\nEu autorizo, de forma voluntária e gratuita, o estúdio HARCANJO INK TATTOO, doravante denominado "Estúdio", a utilizar minha imagem em fotografias ou vídeos registrados durante o procedimento de perfuração para fins de divulgação nas redes sociais do Estúdio.\n\n1. Autorização de Uso de Imagem: Ao assinar este termo, autorizo o Estúdio a utilizar minha imagem, capturada em fotografias ou vídeos, para fins de divulgação, promoção e marketing nas redes sociais do Estúdio, incluindo, mas não se limitando a, Instagram, Facebook, Twitter e YouTube.\n2. Finalidade: Entendo que o Estúdio poderá utilizar minha imagem em posts, stories, anúncios e outros conteúdos relacionados à perfuração corporal, a fim de demonstrar o trabalho realizado pelo Estúdio e promover seus serviços. Essa utilização tem como objetivo mostrar o resultado do procedimento e auxiliar outras pessoas interessadas em perfurações corporais.\n3. Privacidade e Consentimento: Declaro estar ciente de que as imagens publicadas nas redes sociais são de acesso público e que, mesmo que sejam adotadas medidas de segurança e privacidade, não é possível garantir total confidencialidade ou controle sobre o uso dessas imagens por terceiros.\n4. Direitos Autorais e Propriedade Intelectual: Reconheço que a imagem capturada em fotografias ou vídeos é de minha autoria, mas compreendo que estou cedendo ao Estúdio apenas o direito de uso, mantendo todos os direitos autorais e propriedade intelectual sobre a mesma. Não terei direito a qualquer remuneração ou compensação financeira pela utilização da minha imagem.\n5. Prazo de Utilização: A autorização concedida neste termo é válida por tempo indeterminado, a partir da data de assinatura, e abrange tanto as imagens já capturadas quanto aquelas a serem capturadas futuramente.\n6. Revogação da Autorização: Reservo-me o direito de revogar esta autorização a qualquer momento, mediante notificação por escrito ao Estúdio. No entanto, compreendo que a revogação não terá efeito retroativo, sendo aplicável apenas a partir da data de recebimento da notificação pelo Estúdio.\n\nDeclaro que li e compreendi este Termo de Autorização de Uso de Imagem e concordo com todos os seus termos e condições. Estou ciente de que esta autorização é voluntária e que estou cedendo meu direito de uso de imagem de forma consciente e voluntária.', type: 'text_block' },
+            { id: '38', label: 'Com base no texto acima, você autoriza o uso da imagem para as redes sociais do Estúdio?', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '39', label: 'Data da autorização', type: 'date' },
+            { id: '40', label: 'Você está ciente que todas as perguntas a cima será verificada caso aconteça algo com a sua tatuagem', type: 'radio', options: ['Sim', 'Não'] },
+            { id: '41', label: 'Local da tatuagem', type: 'text' },
+            { id: '42', label: 'Tipo de tatuagem', type: 'text' },
+            { id: '43', label: 'Será feita em uma ou mais sessões', type: 'text' },
+            { id: '45', label: 'O cliente é de menor?', type: 'radio', options: ['Sim', 'Não'] }
+          ] 
+        });
+      }
+      setLoading(false);
+    };
+    fetchForm();
+  }, []);
+
+  if (loading) {
+    return <div className="text-white text-center py-10">Carregando...</div>;
+  }
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-orange-500">Editar Ficha de Anamnese</h2>
+        <p className="text-gray-400 text-sm mt-1">Personalize os campos da sua ficha de anamnese. Adicione campos como "Responsável pelo menor" ou "Anexo de documento".</p>
+      </div>
+      <FormBuilder 
+        initialForm={form} 
+        fixedTitle={true}
+        onSave={() => {
+          alert('Ficha de Anamnese salva com sucesso!');
+        }} 
+      />
+    </div>
+  );
+};
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -5244,8 +5767,18 @@ const PublicPortfolio = () => {
 const ClientPortal = () => {
   const [form, setForm] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [clients, setClients] = useState<any[]>([]);
+  const [responses, setResponses] = useState<Record<string, any>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
+    const fetchClients = async () => {
+      const q = query(collection(db, 'clients'));
+      const snapshot = await getDocs(q);
+      setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    };
+    fetchClients();
+
     const q = query(collection(db, 'forms'), where('title', '==', 'Ficha Anamnese'), limit(1));
     getDocs(q).then(snapshot => {
       if (!snapshot.empty) {
@@ -5254,6 +5787,46 @@ const ClientPortal = () => {
       setLoading(false);
     });
   }, []);
+
+  const handleResponseChange = (fieldId: string, value: any) => {
+    setResponses(prev => ({ ...prev, [fieldId]: value }));
+  };
+
+  const handleSave = async () => {
+    if (!form) return;
+
+    // Validation
+    const missingFields: string[] = [];
+    form.fields.forEach((field: any) => {
+      if (field.required && field.type !== 'text_block') {
+        const value = responses[field.id];
+        if (value === undefined || value === null || value === '' || (field.type === 'checkbox' && value === false)) {
+          missingFields.push(field.label);
+        }
+      }
+    });
+
+    if (missingFields.length > 0) {
+      alert(`Por favor, preencha os seguintes campos obrigatórios:\n\n${missingFields.join('\n')}`);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await addDoc(collection(db, 'anamnese_responses'), {
+        formId: form.id || 'ficha-anamnese',
+        responses,
+        createdAt: new Date().toISOString()
+      });
+      alert('Ficha salva com sucesso!');
+      setResponses({});
+    } catch (error) {
+      console.error('Erro ao salvar ficha:', error);
+      alert('Erro ao salvar a ficha. Tente novamente.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   if (loading) return <div className="min-h-screen bg-[#0f1115] flex items-center justify-center text-white">Carregando...</div>;
 
@@ -5270,59 +5843,111 @@ const ClientPortal = () => {
       <div className="bg-[#1a1d21] p-6 rounded-3xl border border-white/5 max-w-4xl w-full space-y-8">
         <h2 className="text-2xl font-bold text-orange-500 text-center">{form.title}</h2>
         
-        <div className="bg-[#0f1115] p-6 rounded-2xl border border-white/5 space-y-4">
+        <div className="bg-[#0f1115] p-6 rounded-2xl border border-white/5 space-y-6">
           {form.fields.map((field: any) => (
-            <div key={field.id} className="space-y-1">
-              <label className="text-xs text-gray-500 font-bold uppercase block">{field.label}</label>
-              {field.type === 'text' && <input className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-2 text-white" />}
-              {field.type === 'checkbox' && <input type="checkbox" className="w-5 h-5 accent-orange-500" />}
+            <div key={field.id} className="space-y-2">
+              {field.type !== 'text_block' && (
+                <label className="text-xs text-gray-500 font-bold uppercase block">
+                  {field.label} {field.required && <span className="text-red-500">*</span>}
+                </label>
+              )}
+              {field.type === 'text' && (
+                <input 
+                  type="text"
+                  value={responses[field.id] || ''}
+                  onChange={(e) => handleResponseChange(field.id, e.target.value)}
+                  className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all" 
+                />
+              )}
+              {field.type === 'textarea' && (
+                <textarea 
+                  value={responses[field.id] || ''}
+                  onChange={(e) => handleResponseChange(field.id, e.target.value)}
+                  className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all" 
+                  rows={3}
+                ></textarea>
+              )}
+              {field.type === 'number' && (
+                <input 
+                  type="number" 
+                  value={responses[field.id] || ''}
+                  onChange={(e) => handleResponseChange(field.id, e.target.value)}
+                  className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all" 
+                />
+              )}
+              {field.type === 'date' && (
+                <input 
+                  type="date" 
+                  value={responses[field.id] || ''}
+                  onChange={(e) => handleResponseChange(field.id, e.target.value)}
+                  className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all" 
+                />
+              )}
+              {field.type === 'checkbox' && (
+                <input 
+                  type="checkbox" 
+                  checked={responses[field.id] || false}
+                  onChange={(e) => handleResponseChange(field.id, e.target.checked)}
+                  className="w-5 h-5 accent-orange-500" 
+                />
+              )}
+              {field.type === 'file' && (
+                <input 
+                  type="file" 
+                  onChange={(e) => handleResponseChange(field.id, e.target.files?.[0])}
+                  className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-3 text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-500 file:text-white hover:file:bg-orange-600 focus:border-orange-500 outline-none transition-all" 
+                />
+              )}
+              {field.type === 'client_select' && (
+                <div>
+                  <input 
+                    list={`clients-list-${field.id}`}
+                    value={responses[field.id] || ''}
+                    onChange={(e) => handleResponseChange(field.id, e.target.value)}
+                    placeholder="Pesquise o nome do cliente..."
+                    className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-3 text-white focus:border-orange-500 outline-none transition-all"
+                  />
+                  <datalist id={`clients-list-${field.id}`}>
+                    {clients.map(client => (
+                      <option key={client.id} value={client.name} />
+                    ))}
+                  </datalist>
+                </div>
+              )}
+              {field.type === 'text_block' && (
+                <div className="text-sm text-gray-300 leading-relaxed bg-[#1a1d21] p-4 rounded-xl border border-white/5 whitespace-pre-wrap">
+                  {field.label}
+                </div>
+              )}
+              {field.type === 'radio' && field.options && (
+                <div className="flex flex-col gap-2">
+                  {field.options.map((option: string, i: number) => (
+                    <label key={i} className="flex items-center gap-3 text-sm text-gray-300 cursor-pointer">
+                      <input 
+                        type="radio" 
+                        name={field.id} 
+                        value={option} 
+                        checked={responses[field.id] === option}
+                        onChange={(e) => handleResponseChange(field.id, e.target.value)}
+                        className="w-4 h-4 text-orange-500 focus:ring-orange-500 bg-[#1a1d21] border-white/10" 
+                      />
+                      {option}
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
 
-        <button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2">
-          <Save size={20} /> Salvar Minha Ficha
+        <button 
+          onClick={handleSave}
+          disabled={isSaving}
+          className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-orange-500/20 uppercase tracking-widest"
+        >
+          {isSaving ? 'Salvando...' : <><Save size={20} /> Salvar Minha Ficha</>}
         </button>
       </div>
     </div>
   );
-};
-
-const FormManager = ({ onEdit }: { onEdit: (form: any) => void }) => {
-  const [forms, setForms] = useState<any[]>([]);
-
-  useEffect(() => {
-    const q = query(collection(db, 'forms'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setForms(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    return unsubscribe;
-  }, []);
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-2xl font-bold text-white">Gerenciar Formulários</h3>
-        <button onClick={() => onEdit(null)} className="bg-orange-500 text-white px-6 py-2 rounded-xl font-bold">Novo Formulário</button>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {forms.map(form => (
-          <div key={form.id} className="bg-[#1a1d21] p-6 rounded-2xl border border-white/5 flex justify-between items-center">
-            <span className="text-white font-bold">{form.title}</span>
-            <button onClick={() => onEdit(form)} className="text-orange-500 font-bold">Editar</button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const CriadorDeFormulariosView = () => {
-  const [editingForm, setEditingForm] = useState<any | null>(undefined);
-
-  if (editingForm === undefined) {
-    return <FormManager onEdit={setEditingForm} />;
-  }
-
-  return <FormBuilder initialForm={editingForm} onSave={() => setEditingForm(undefined)} />;
 };
