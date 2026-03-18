@@ -150,8 +150,8 @@ const Logo = ({ size = "normal" }: { size?: "normal" | "small" }) => {
   if (error) {
     return (
       <div className="flex items-center gap-2">
-        <span className={`${size === 'normal' ? 'text-4xl' : 'text-2xl'} font-black text-[#00cc66] leading-none`}>HT</span>
-        <span className={`${size === 'normal' ? 'text-xl' : 'text-sm'} font-black tracking-tighter leading-none`}>Gestão Studio</span>
+        <span className={`${size === 'normal' ? 'text-2xl' : 'text-xl'} font-black text-[#00cc66] leading-none`}>Harcanjo</span>
+        <span className={`${size === 'normal' ? 'text-xl' : 'text-sm'} font-black tracking-tighter leading-none`}>Ink Tattoo</span>
       </div>
     );
   }
@@ -536,6 +536,7 @@ const Dashboard = () => {
   const [clientSearch, setClientSearch] = useState('');
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [selectedBudget, setSelectedBudget] = useState<any>(null);
   const [cadastrosSubView, setCadastrosSubView] = useState<string | null>(null);
   const [clients, setClients] = useState<any[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
@@ -687,7 +688,7 @@ const Dashboard = () => {
 
           <SidebarItem icon={Lock} label={`Caixa Diário (${caixaStatus})`} active={activeTab === 'Caixa Diário'} onClick={() => handleTabChange('Caixa Diário')} />
           <SidebarItem icon={FileText} label="Orçamentos" active={activeTab === 'Orçamentos'} onClick={() => handleTabChange('Orçamentos')} />
-          <SidebarItem icon={ClipboardList} label="Orçamentos (Kanban)" active={activeTab === 'Orçamentos (Kanban)'} onClick={() => handleTabChange('Orçamentos (Kanban)')} />
+          <SidebarItem icon={Stethoscope} label="Anamnese" active={activeTab === 'Anamnese'} onClick={() => handleTabChange('Anamnese')} />
           <SidebarItem icon={ClipboardList} label="Gerenciar Orçamentos" active={activeTab === 'Gerenciar Orçamentos'} onClick={() => handleTabChange('Gerenciar Orçamentos')} />
           <SidebarItem icon={DollarSign} label="Financeiro" active={activeTab === 'Financeiro'} onClick={() => handleTabChange('Financeiro')} />
           <SidebarItem icon={Package} label="Estoque" active={activeTab === 'Estoque'} onClick={() => handleTabChange('Estoque')} />
@@ -695,26 +696,18 @@ const Dashboard = () => {
           <div className="my-4 border-t border-white/5" />
 
           <SidebarItem icon={Calendar} label="Agenda" active={activeTab === 'Agenda'} onClick={() => handleTabChange('Agenda')} />
-          <SidebarItem icon={Activity} label="Visão Geral" active={activeTab === 'Visão Geral'} onClick={() => handleTabChange('Visão Geral')} />
-          <SidebarItem icon={Zap} label="Acesso Rápido" active={activeTab === 'Acesso Rápido'} onClick={() => handleTabChange('Acesso Rápido')} />
-          <SidebarItem icon={Briefcase} label="Diagnóstico" active={activeTab === 'Diagnóstico'} onClick={() => handleTabChange('Diagnóstico')} />
-          <SidebarItem icon={Settings} label="Todos Serviços" active={activeTab === 'Todos Serviços'} onClick={() => handleTabChange('Todos Serviços')} />
 
           <div className="my-4 border-t border-white/5" />
 
           <SidebarItem icon={ClipboardList} label="Formulários" active={activeTab === 'Formulários'} onClick={() => handleTabChange('Formulários')} />
-          <SidebarItem icon={LinkIcon} label="Formulários p/ Clientes" active={activeTab === 'Formulários p/ Clientes'} onClick={() => handleTabChange('Formulários p/ Clientes')} />
           <SidebarItem icon={PlusCircle} label="Criador de Formulários" active={activeTab === 'Criador de Formulários'} onClick={() => handleTabChange('Criador de Formulários')} />
           
           <div className="my-4 border-t border-white/5" />
 
           <SidebarItem icon={Camera} label="Meus trabalhos" active={activeTab === 'Meus trabalhos'} onClick={() => handleTabChange('Meus trabalhos')} />
-          <SidebarItem icon={BookOpen} label="Seu Catálogo" active={activeTab === 'Seu Catálogo'} onClick={() => handleTabChange('Seu Catálogo')} />
 
           <div className="my-4 border-t border-white/5" />
 
-          <SidebarItem icon={Target} label="Crescimento" active={activeTab === 'Crescimento'} onClick={() => handleTabChange('Crescimento')} />
-          <SidebarItem icon={Megaphone} label="Marketing" active={activeTab === 'Marketing'} onClick={() => handleTabChange('Marketing')} />
           <SidebarItem icon={Users} label="Análise de Clientes" active={activeTab === 'Análise de Clientes'} onClick={() => handleTabChange('Análise de Clientes')} />
           <SidebarItem icon={BarChart3} label="Relatórios" active={activeTab === 'Relatórios'} onClick={() => handleTabChange('Relatórios')} />
           
@@ -772,7 +765,7 @@ const Dashboard = () => {
                 <img src={user.photoURL} alt="Avatar" className="w-8 h-8 rounded-lg border border-white/10" />
               ) : (
                 <div className="w-8 h-8 rounded-lg border border-white/10 bg-[#00cc66]/20 flex items-center justify-center text-[#00cc66] font-bold text-xs">
-                  HT
+                  HI
                 </div>
               )}
             </div>
@@ -935,19 +928,21 @@ const Dashboard = () => {
               )}
 
               {activeTab === 'Orçamentos' && (
-                <BudgetDashboard onCreateBudget={() => handleTabChange('Gerenciar Orçamentos')} pricingConfig={pricingConfig} onTabChange={handleTabChange} />
+                <div className="space-y-8">
+                  <BudgetDashboard onCreateBudget={() => handleTabChange('Gerenciar Orçamentos')} pricingConfig={pricingConfig} onTabChange={handleTabChange} setSelectedBudget={setSelectedBudget} />
+                  <ClientForms />
+                </div>
               )}
 
-              {activeTab === 'Orçamentos (Kanban)' && (
-                <KanbanDashboard setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />
-              )}
+              {selectedBudget && <BudgetDetailsModal budget={selectedBudget} onClose={() => setSelectedBudget(null)} setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />}
 
+              {activeTab === 'Anamnese' && (
+                <div className="bg-[#1a1d21] rounded-3xl border border-white/5 p-6">
+                  <ClientPortal />
+                </div>
+              )}
               {activeTab === 'Gerenciar Orçamentos' && (
                 <BudgetManager setActiveTab={setActiveTab} setActiveSubTab={setActiveSubTab} />
-              )}
-
-              {activeTab === 'Formulários p/ Clientes' && (
-                <ClientForms />
               )}
 
               {activeTab === 'Formulários' && (
@@ -965,9 +960,7 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {activeTab === 'Criador de Formulários' && (
-                <FormBuilder onSave={() => handleTabChange('Formulários')} />
-              )}
+              {activeTab === 'Criador de Formulários' && <CriadorDeFormulariosView />}
 
               {activeTab === 'Cadastros' && (
                 <div className="space-y-6">
@@ -2560,8 +2553,6 @@ const CadastrosMenu = ({ onSelect }: { onSelect: (view: string) => void }) => {
     { id: 'Importar Clientes', icon: FileUp, label: 'Importar Clientes' },
     { id: 'Cadastro dos Fornecedores', icon: Truck, label: 'Cadastro dos Fornecedores' },
     { id: 'Etiquetas', icon: Tag, label: 'Etiquetas' },
-    { id: 'Cadastro dos Profissionais', icon: UserCog, label: 'Cadastro dos Profissionais' },
-    { id: 'Cadastro dos Espaços', icon: Home, label: 'Cadastro dos Espaços' },
   ];
 
   return (
@@ -2895,9 +2886,9 @@ const FormsList = () => {
   );
 };
 
-const FormBuilder = ({ onSave }: { onSave: () => void }) => {
-  const [title, setTitle] = useState('');
-  const [fields, setFields] = useState<any[]>([]);
+const FormBuilder = ({ onSave, initialForm }: { onSave: () => void, initialForm?: any }) => {
+  const [title, setTitle] = useState(initialForm?.title || '');
+  const [fields, setFields] = useState<any[]>(initialForm?.fields || []);
   const [isSaving, setIsSaving] = useState(false);
 
   const addField = () => {
@@ -2924,11 +2915,19 @@ const FormBuilder = ({ onSave }: { onSave: () => void }) => {
 
     setIsSaving(true);
     try {
-      await addDoc(collection(db, 'forms'), {
-        title,
-        fields,
-        createdAt: new Date().toISOString()
-      });
+      if (initialForm?.id) {
+        await updateDoc(doc(db, 'forms', initialForm.id), {
+          title,
+          fields,
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        await addDoc(collection(db, 'forms'), {
+          title,
+          fields,
+          createdAt: new Date().toISOString()
+        });
+      }
       onSave();
     } catch (error) {
       console.error("Erro ao salvar formulário:", error);
@@ -2937,6 +2936,7 @@ const FormBuilder = ({ onSave }: { onSave: () => void }) => {
       setIsSaving(false);
     }
   };
+
 
   return (
     <div className="space-y-8">
@@ -3841,7 +3841,7 @@ const KanbanDashboard = ({ setActiveTab, setActiveSubTab }: { setActiveTab: (tab
 
   const budgets = [
     { id: '1', service: 'Tatuagem', client: 'Luiz Silveira Da Conceicao Junior', date: '12/03/26', status: 'Novos Pedidos' },
-    { id: '2', service: 'HT sistema', client: 'Luiz Silveira Da Conceicao Junior', date: '12/03/26', status: 'Novos Pedidos' },
+    { id: '2', service: 'Harcanjo Ink', client: 'Luiz Silveira Da Conceicao Junior', date: '12/03/26', status: 'Novos Pedidos' },
   ];
 
   if (view === 'clientDetails') {
@@ -4282,11 +4282,32 @@ const AtendimentosView = ({ clients, activeSubTab, setActiveSubTab }: { clients:
   );
 };
 
-const BudgetDashboard = ({ onCreateBudget, pricingConfig, onTabChange }: { onCreateBudget: () => void, pricingConfig: any, onTabChange: (tab: string) => void }) => {
+const ClientFormModal = ({ onClose }: { onClose: () => void }) => {
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#1a1d21] w-full max-w-4xl h-[80vh] rounded-3xl border border-white/10 p-8 shadow-2xl overflow-hidden flex flex-col">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-white">Formulário para Clientes</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={24} /></button>
+        </div>
+        <div className="flex-1 overflow-auto">
+          <iframe 
+            src={`${window.location.origin}/budget-request/orcamentosgestaoink`} 
+            className="w-full h-full border-0"
+            title="Formulário para Clientes"
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const BudgetDashboard = ({ onCreateBudget, pricingConfig, onTabChange, setSelectedBudget }: { onCreateBudget: () => void, pricingConfig: any, onTabChange: (tab: string) => void, setSelectedBudget: (budget: any) => void }) => {
   const [budgets, setBudgets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('Todos');
   const [showNewModal, setShowNewModal] = useState(false);
+  const [showFormModal, setShowFormModal] = useState(false);
 
   useEffect(() => {
     const q = query(collection(db, 'budgets'), orderBy('createdAt', 'desc'));
@@ -4308,15 +4329,16 @@ const BudgetDashboard = ({ onCreateBudget, pricingConfig, onTabChange }: { onCre
   return (
     <div className="space-y-6">
       {showNewModal && <NewBudgetModal onClose={() => setShowNewModal(false)} pricingConfig={pricingConfig} onBudgetCreated={() => onTabChange('Gerenciar Orçamentos')} />}
+      {showFormModal && <ClientFormModal onClose={() => setShowFormModal(false)} />}
       <div className="flex items-center gap-4 bg-[#1a1d21] p-4 rounded-2xl border border-white/5">
         <button onClick={() => setShowNewModal(true)} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
           <Plus size={18} /> Novo Orçamento
         </button>
-        <button className="bg-orange-400 hover:bg-orange-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
+        <button onClick={() => setShowFormModal(true)} className="bg-orange-400 hover:bg-orange-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
           <LinkIcon size={18} /> Formulário para Clientes
         </button>
-        <button className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
-          <Activity size={18} /> Motivo das Perdas
+        <button onClick={() => onTabChange('Anamnese')} className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
+          <Stethoscope size={18} /> Ficha de Anamnese
         </button>
         <button className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
           <BarChart3 size={18} /> Funil de Vendas
@@ -5040,6 +5062,45 @@ const PublicTracking = () => {
   );
 };
 
+const FormManager = ({ onEdit }: { onEdit: (form: any) => void }) => {
+  const [forms, setForms] = useState<any[]>([]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'forms'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setForms(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return unsubscribe;
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h3 className="text-2xl font-bold text-white">Gerenciar Formulários</h3>
+        <button onClick={() => onEdit(null)} className="bg-orange-500 text-white px-6 py-2 rounded-xl font-bold">Novo Formulário</button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {forms.map(form => (
+          <div key={form.id} className="bg-[#1a1d21] p-6 rounded-2xl border border-white/5 flex justify-between items-center">
+            <span className="text-white font-bold">{form.title}</span>
+            <button onClick={() => onEdit(form)} className="text-orange-500 font-bold">Editar</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const CriadorDeFormulariosView = () => {
+  const [editingForm, setEditingForm] = useState<any | null>(undefined);
+
+  if (editingForm === undefined) {
+    return <FormManager onEdit={setEditingForm} />;
+  }
+
+  return <FormBuilder initialForm={editingForm} onSave={() => setEditingForm(undefined)} />;
+};
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -5181,161 +5242,87 @@ const PublicPortfolio = () => {
 };
 
 const ClientPortal = () => {
-  const [searchParams] = useSearchParams();
-  const initialClientId = searchParams.get('clientId');
-  const [step, setStep] = useState(initialClientId ? 'anamnesis' : 'identify');
-  const [phone, setPhone] = useState('');
-  const [client, setClient] = useState<any>(null);
+  const [form, setForm] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (initialClientId) {
-      const fetchClient = async () => {
-        const docRef = doc(db, 'clients', initialClientId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setClient({ id: docSnap.id, ...docSnap.data() });
-        }
-      };
-      fetchClient();
-    }
-  }, [initialClientId]);
+    const q = query(collection(db, 'forms'), where('title', '==', 'Ficha Anamnese'), limit(1));
+    getDocs(q).then(snapshot => {
+      if (!snapshot.empty) {
+        setForm(snapshot.docs[0].data());
+      }
+      setLoading(false);
+    });
+  }, []);
 
-  const handleIdentify = async () => {
-    const q = query(collection(db, 'clients'), where('phone', '==', phone));
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-      setClient({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
-      setStep('confirm');
-    } else {
-      setStep('confirm'); // Or handle new client
-    }
-  };
+  if (loading) return <div className="min-h-screen bg-[#0f1115] flex items-center justify-center text-white">Carregando...</div>;
 
-  return (
-    <div className="min-h-screen bg-[#2c3e50] flex items-center justify-center p-4">
-      {step === 'identify' && (
-        <div className="bg-[#1a1d21] p-10 rounded-3xl border border-white/5 text-center max-w-md w-full space-y-6">
-          <h2 className="text-2xl font-bold text-orange-500">Identifique-se</h2>
-          <p className="text-gray-400">Para começar, informe seu número de WhatsApp com DDD</p>
-          <input 
-            type="tel" 
-            placeholder="(00) 00000-0000" 
-            className="w-full bg-[#0f1115] border border-white/5 rounded-xl px-4 py-3 text-white"
-            value={phone}
-            onChange={e => setPhone(e.target.value)}
-          />
-          <button onClick={handleIdentify} className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl">VERIFICAR</button>
-        </div>
-      )}
-      {step === 'confirm' && (
-        <div className="bg-[#1a1d21] p-10 rounded-3xl border border-white/5 max-w-md w-full space-y-6">
-          <h2 className="text-2xl font-bold text-orange-500">Seus Dados</h2>
-          {client ? (
-            <div className="bg-white/5 p-4 rounded-xl text-gray-300 text-sm">
-              <p>Nome: {client.name}</p>
-              <p>Email: {client.email}</p>
-              <p>WhatsApp: {client.phone}</p>
-            </div>
-          ) : <p className="text-gray-400">Cliente não encontrado. Preencha seus dados.</p>}
-          <button onClick={() => setStep('menu')} className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl">CONTINUAR</button>
-        </div>
-      )}
-      {step === 'menu' && (
-        <div className="bg-[#1a1d21] p-10 rounded-3xl border border-white/5 max-w-2xl w-full space-y-6">
-          <h2 className="text-2xl font-bold text-orange-500 text-center">O que você deseja fazer?</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <button onClick={() => setStep('budget')} className="bg-white/5 p-6 rounded-2xl border border-white/5 text-white font-bold">Solicitar Orçamento</button>
-            <button className="bg-white/5 p-6 rounded-2xl border border-white/5 text-white font-bold">Calcular Valor</button>
-            <button onClick={() => setStep('anamnesis')} className="bg-white/5 p-6 rounded-2xl border border-white/5 text-white font-bold">Preencher Anamnese</button>
-            <button className="bg-white/5 p-6 rounded-2xl border border-white/5 text-white font-bold">Fazer Agendamento</button>
-            <button className="bg-white/5 p-6 rounded-2xl border border-white/5 text-white font-bold">Finalizar Cadastro</button>
-          </div>
-        </div>
-      )}
-      {step === 'anamnesis' && (
-        <div className="bg-[#1a1d21] p-6 rounded-3xl border border-white/5 max-w-4xl w-full space-y-8">
-          <h2 className="text-2xl font-bold text-orange-500 text-center">Ficha Anamnese</h2>
-          
-          {/* Personal Data Section */}
-          <div className="bg-[#0f1115] p-6 rounded-2xl border border-white/5 space-y-4">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2"><User size={20} /> Seus Dados Pessoais</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {['WhatsApp', 'Nome', 'CPF', 'RG', 'Data Nascimento', 'Gênero', 'CEP', 'Cidade', 'UF', 'Endereço', 'Bairro', 'E-mail'].map(field => (
-                <div key={field}>
-                  <label className="text-xs text-gray-500 font-bold uppercase block mb-1">{field}</label>
-                  <input className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-2 text-white" />
-                </div>
-              ))}
-              <div className="col-span-2">
-                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Como nos Conheceu?</label>
-                <select className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-2 text-white">
-                  <option>Selecione</option>
-                </select>
-              </div>
-            </div>
-            <button className="bg-orange-500 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2">
-              <Camera size={16} /> Anexar Sua Foto
-            </button>
-          </div>
-
-          {/* Evaluation Section */}
-          <div className="bg-[#0f1115] p-6 rounded-2xl border border-white/5 space-y-4">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2"><Activity size={20} /> Avaliação</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Profissional</label>
-                <select className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-2 text-white"><option>Selecione</option></select>
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Serviço</label>
-                <select className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-2 text-white"><option>Selecione</option></select>
-              </div>
-            </div>
-
-            {['É portador de Diabetes? Fez hemograma a menos de um ano?', 'Faz uso de medicamentos ou cirurgia a menos de 6 meses?', 'Pressão Arterial? É Epilético?', 'Teve hepatite, anemia ou é hemofílico?', 'Possui Alergia? Qual?', 'Portador de doenças transmissíveis?', 'Fez hemograma completo há menos de um ano?', 'Já teve cicatrização por quelóide?', 'Autoriza a divulgação da imagem em nossa rede social?'].map((q, i) => (
-              <div key={i} className="border-b border-white/5 pb-2">
-                <label className="flex items-center gap-3 text-white text-sm">
-                  <input type="checkbox" className="w-5 h-5 accent-orange-500" />
-                  {q}
-                </label>
-                <input placeholder="Observações" className="w-full mt-1 bg-[#1a1d21] border border-white/5 rounded-lg px-3 py-1 text-white text-sm" />
-              </div>
-            ))}
-            
-            <div>
-              <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Sangue</label>
-              <select className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-2 text-white"><option>Selecione</option></select>
-            </div>
-          </div>
-
-          {/* Description Section */}
-          <div className="bg-[#0f1115] p-6 rounded-2xl border border-white/5 space-y-4">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2"><FileText size={20} /> Descrição</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input placeholder="Descrever o Procedimento" className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-2 text-white" />
-              <select className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-3 text-white"><option>Região Corpo</option></select>
-            </div>
-          </div>
-
-          {/* Terms and Uploads */}
-          <div className="bg-[#0f1115] p-6 rounded-2xl border border-white/5 space-y-4">
-            <div className="h-40 overflow-y-auto text-xs text-gray-400 bg-[#1a1d21] p-3 rounded-lg border border-white/5">
-              {/* ... (Term text remains the same) ... */}
-              Eu, abaixo assinado(a), autorizo e concordo com o serviço prestado, declarando estar ciente de todos os cuidados recomendados pelo técnico aplicador...
-            </div>
-            <p className="text-sm text-white font-bold">Reconheço as informações apresentadas nesse documento como verdadeiras.</p>
-            <div className="flex gap-4">
-              <button className="bg-orange-500/20 text-orange-500 px-4 py-2 rounded-xl text-xs font-bold">Anexar Foto Frente Documento</button>
-              <button className="bg-orange-500/20 text-orange-500 px-4 py-2 rounded-xl text-xs font-bold">Anexar Foto Verso Documento</button>
-            </div>
-          </div>
-
-          <button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2">
-            <Save size={20} /> Salvar Minha Ficha
-          </button>
-          <button onClick={() => setStep('menu')} className="w-full bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl">VOLTAR</button>
-        </div>
-      )}
+  if (!form) return (
+    <div className="min-h-screen bg-[#0f1115] flex items-center justify-center p-4 text-white">
+      <div className="bg-[#1a1d21] p-6 rounded-3xl border border-white/5 max-w-4xl w-full">
+        <h2 className="text-2xl font-bold text-orange-500 text-center">Ficha Anamnese não encontrada.</h2>
+      </div>
     </div>
   );
+
+  return (
+    <div className="min-h-screen bg-[#0f1115] flex items-center justify-center p-4">
+      <div className="bg-[#1a1d21] p-6 rounded-3xl border border-white/5 max-w-4xl w-full space-y-8">
+        <h2 className="text-2xl font-bold text-orange-500 text-center">{form.title}</h2>
+        
+        <div className="bg-[#0f1115] p-6 rounded-2xl border border-white/5 space-y-4">
+          {form.fields.map((field: any) => (
+            <div key={field.id} className="space-y-1">
+              <label className="text-xs text-gray-500 font-bold uppercase block">{field.label}</label>
+              {field.type === 'text' && <input className="w-full bg-[#1a1d21] border border-white/5 rounded-xl px-4 py-2 text-white" />}
+              {field.type === 'checkbox' && <input type="checkbox" className="w-5 h-5 accent-orange-500" />}
+            </div>
+          ))}
+        </div>
+
+        <button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2">
+          <Save size={20} /> Salvar Minha Ficha
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const FormManager = ({ onEdit }: { onEdit: (form: any) => void }) => {
+  const [forms, setForms] = useState<any[]>([]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'forms'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setForms(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return unsubscribe;
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h3 className="text-2xl font-bold text-white">Gerenciar Formulários</h3>
+        <button onClick={() => onEdit(null)} className="bg-orange-500 text-white px-6 py-2 rounded-xl font-bold">Novo Formulário</button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {forms.map(form => (
+          <div key={form.id} className="bg-[#1a1d21] p-6 rounded-2xl border border-white/5 flex justify-between items-center">
+            <span className="text-white font-bold">{form.title}</span>
+            <button onClick={() => onEdit(form)} className="text-orange-500 font-bold">Editar</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const CriadorDeFormulariosView = () => {
+  const [editingForm, setEditingForm] = useState<any | null>(undefined);
+
+  if (editingForm === undefined) {
+    return <FormManager onEdit={setEditingForm} />;
+  }
+
+  return <FormBuilder initialForm={editingForm} onSave={() => setEditingForm(undefined)} />;
 };
